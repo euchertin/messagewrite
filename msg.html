@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ru">
 <head>
@@ -98,6 +99,7 @@
 </section>
 
 <script type="module">
+/* Полный модульный скрипт — ставь вместо старого */
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, orderBy, onSnapshot, limit, runTransaction, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
@@ -107,14 +109,12 @@ const firebaseConfig = {
   apiKey: "AIzaSyBtcsiDCvGMBHoNKd7CxrS9w6zG0wnNzIc",
   authDomain: "messagecr-1e301.firebaseapp.com",
   projectId: "messagecr-1e301",
-  // <-- исправлено:
   storageBucket: "messagecr-1e301.appspot.com",
   messagingSenderId: "498943600919",
   appId: "1:498943600919:web:b0cc23f1f4a91fac52af52",
   measurementId: "G-7LT8E14VWG"
 };
 
-// инициализируем app надёжно и используем ссылку app далее
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -122,7 +122,7 @@ const storage = getStorage(app);
 
 console.log('Firebase initialized', { projectId: firebaseConfig.projectId });
 
-/* === DOM refs (то же самое, что у тебя) === */
+/* === DOM refs === */
 const roomsEl = document.getElementById('rooms');
 const roomsMobileList = document.getElementById('roomsMobileList');
 const roomsOverlay = document.getElementById('roomsOverlay');
@@ -138,14 +138,12 @@ const sendBtn = document.getElementById('sendBtn');
 const filePicker = document.getElementById('filePicker');
 const attachBtn = document.getElementById('attachBtn');
 const joinCodeInput = document.getElementById('joinCode');
-const joinBtn = document.getElementById('joinBtn');
-const createBtn = document.getElementById('createBtn');
+const joinCodeMobileInput = document.getElementById('joinCode_mobile');
 const nicknameInput = document.getElementById('nickname');
 const saveNickBtn = document.getElementById('saveNick');
 const nicknameInputMobile = document.getElementById('nickname_mobile');
 const saveNickBtnMobile = document.getElementById('saveNick_mobile');
-const joinCodeMobile = document.getElementById('joinCode_mobile');
-const joinBtnMobile = document.getElementById('joinBtn_mobile');
+const createBtn = document.getElementById('createBtn');
 const createBtnMobile = document.getElementById('createBtn_mobile');
 const totalUnreadEl = document.getElementById('totalUnread');
 const roomNameInput = document.getElementById('roomNameInput');
@@ -155,48 +153,23 @@ const roomNameInput_m = document.getElementById('roomNameInput_m');
 const roomAvatarInput_m = document.getElementById('roomAvatarInput_m');
 const saveRoomMeta_m = document.getElementById('saveRoomMeta_m');
 
+/* переменные состояния */
 let user = null;
-
 let nickname = localStorage.getItem('crm_nick') || 'Гость';
-nicknameInput.value = nickname;
-nicknameInputMobile.value = nickname;
-
-onAuthStateChanged(auth, async (u) => {
-  console.log('onAuthStateChanged', u);
-  try {
-    if (!u) {
-      // попытка анонимного входа
-      const res = await signInAnonymously(auth);
-      console.log('signed in anonymously', res?.user?.uid);
-      return;
-    }
-    user = u;
-    // синхронизируем ник
-    nicknameInput.value = nickname;
-    nicknameInputMobile.value = nickname;
-    renderRoomsList();
-    // опционально загружаем список комнат пользователя из Firestore
-    loadMyRoomsFromFirestore().catch(err => console.error('loadMyRoomsFromFirestore error', err));
-  } catch (err) {
-    console.error('Auth flow error', err);
-    alert('Ошибка авторизации: ' + (err.message || err.code || 'unknown'));
-  }
-});
-
-saveNickBtn.onclick = saveNick;
-saveNickBtnMobile.onclick = saveNick;
-function saveNick(){
-  nickname = (nicknameInput.value || nicknameInputMobile.value || 'Гость').trim().slice(0,32);
-  nicknameInput.value = nickname; nicknameInputMobile.value = nickname;
-  localStorage.setItem('crm_nick', nickname);
-  renderMessagesQuickMeta();
-}
-
 let currentRoom = null;
 let unsubMessages = null;
 let myRooms = JSON.parse(localStorage.getItem('crm_myRooms') || '[]');
 const roomWatchers = {};
 
+/* инициализация ников в полях (если поля есть) */
+if (nicknameInput) nicknameInput.value = nickname;
+if (nicknameInputMobile) nicknameInputMobile.value = nickname;
+
+/* --- Утилиты --- */
+function isValidRoomCode(code){
+  // соответствует правилам: 6 символов, A-H J-N P-Z и цифры 2-9 (без I,L,O,0,1)
+  return /^[A-HJ-NP-Z2-9]{6}$/.test(code);
+}
 function randCode(len=6){
   const alphabet='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let out=''; crypto.getRandomValues(new Uint32Array(len)).forEach(n=> out+=alphabet[n%alphabet.length]);
@@ -206,6 +179,7 @@ function escapeHtml(s){ if(!s && s!==0) return ''; return String(s).replace(/[&<
 function fmtTime(ts){ try{ const d = new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function persistMyRooms(){ try{ localStorage.setItem('crm_myRooms', JSON.stringify(myRooms)); }catch(e){} }
 
+/* --- Watchers --- */
 function ensureRoomWatcher(code){
   if(roomWatchers[code]) return;
   try{
@@ -223,12 +197,13 @@ function ensureRoomWatcher(code){
           persistMyRooms(); renderRoomsList();
         }
       });
-    });
+    }, err => { console.error('roomWatcher onSnapshot error', err); });
     roomWatchers[code] = unsub;
   }catch(e){ console.error('ensureRoomWatcher error', e); }
 }
 function stopAllWatchers(){ Object.keys(roomWatchers).forEach(k=>{ try{ roomWatchers[k](); }catch(e){ console.error(e) } }); }
 
+/* --- UI: список комнат --- */
 function renderRoomsList(){
   const total = myRooms.reduce((s,r)=> s + (r.unreadCount||0), 0);
   if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none';
@@ -251,6 +226,7 @@ function renderRoomsList(){
     const leaveBtn = div.querySelector('.leave-btn');
     leaveBtn.onclick = (ev)=>{ ev.stopPropagation(); removeFromMyRooms(leaveBtn.dataset.code); };
   });
+
   roomsMobileList.innerHTML='';
   myRooms.forEach(room=>{
     const div = document.createElement('div');
@@ -270,6 +246,8 @@ function renderRoomsList(){
     leaveBtn.onclick = (ev)=>{ ev.stopPropagation(); removeFromMyRooms(leaveBtn.dataset.code); };
   });
 }
+
+/* --- add/remove my rooms --- */
 async function removeFromMyRooms(code){
   myRooms = myRooms.filter(r=> r.code !== code);
   if(roomWatchers[code]){ try{ roomWatchers[code](); }catch(e){ console.error(e) } delete roomWatchers[code]; }
@@ -283,13 +261,13 @@ async function addToMyRooms(code,name,avatar){
   if(!myRooms.find(r=> r.code===code)){ myRooms.push({ code, name, avatar:avatar||'', unreadCount:0, lastSeen: Date.now() }); persistMyRooms(); renderRoomsList(); }
 }
 
+/* --- создание комнаты --- */
 async function createRoomFlow(){
   if(!user){ alert('Вы не авторизованы'); return; }
   const code = randCode();
   const roomRef = doc(db,'rooms',code);
   try{
     await setDoc(roomRef, { createdAt: serverTimestamp(), name: 'Комната '+code, active:true, creator:user.uid, avatar:'' });
-    // добавляем первое сообщение
     await addDoc(collection(db,'rooms',code,'messages'), { t: serverTimestamp(), uid: user.uid, name: nickname, text: `👋 ${nickname} создал(а) комнату`, sys:true });
     await addToMyRooms(code, 'Комната '+code,'');
     openRoom(code,'Комната '+code);
@@ -298,17 +276,29 @@ async function createRoomFlow(){
     alert('Не удалось создать комнату: ' + (e.message||e.code||'unknown'));
   }
 }
+
+/* --- присоединение по коду (с подробным логированием) --- */
 async function joinRoomByCode(code){
   try{
+    console.log('joinRoomByCode called for', code, 'auth.currentUser=', auth.currentUser?.uid, 'user=', user?.uid);
     const roomRef = doc(db, 'rooms', code);
     const snap = await getDoc(roomRef);
-    if(!snap.exists()) { alert('Комната не найдена'); return; }
+    console.log('getDoc result for', roomRef.path, 'exists=', snap.exists(), snap);
+    if(!snap.exists()) {
+      alert('Комната не найдена (либо её нет, либо у вас нет прав читать).');
+      return;
+    }
     const data = snap.data();
+    console.log('room data:', data);
     await addToMyRooms(code, data.name || ('Комната '+code), data.avatar||'');
     openRoom(code, data.name || ('Комната '+code));
-  }catch(e){ console.error('joinRoomByCode error', e); alert('Ошибка при присоединении: ' + (e.message||e.code||'unknown')); }
+  }catch(e){
+    console.error('joinRoomByCode error', e);
+    alert('Ошибка при присоединении: ' + (e.message||e.code||'unknown'));
+  }
 }
 
+/* --- открытие комнаты + подписка на сообщения --- */
 function openRoom(code,name){
   currentRoom = code; roomTitle.textContent = name; roomSub.textContent = 'Код: ' + code;
   shareCode.style.display='inline-block'; shareCode.textContent = 'Поделиться кодом: ' + code;
@@ -331,7 +321,7 @@ function openRoom(code,name){
   }, err => { console.error('onSnapshot messages error', err); });
 }
 
-/* renderMessage и остальные функции оставил как у тебя — не менял логику вывода */
+/* --- отображение сообщения --- */
 function renderMessage(id,m){
   if(m.sys){
     const wrap = document.createElement('div');
@@ -395,6 +385,7 @@ function renderMessage(id,m){
   requestAnimationFrame(()=> wrap.classList.add('show'));
 }
 
+/* --- picker --- */
 function togglePicker(id,force){
   const el = document.getElementById('picker-'+id);
   if(!el) return;
@@ -408,9 +399,11 @@ function renderMessagesQuickMeta(){
   });
 }
 
-sendBtn.onclick = sendText;
-msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(); } });
+/* --- send message --- */
+sendBtn && (sendBtn.onclick = sendText);
+msgInput && msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(); } });
 async function sendText(){
+  console.log('sendText called, currentRoom=', currentRoom, 'user=', user?.uid);
   if(!currentRoom){ alert('Сначала выберите комнату'); return; }
   if(!user){ alert('Вы не авторизованы. Проверьте Anonymous auth в Firebase Console.'); console.error('sendText: no user'); return; }
   const text = msgInput.value.trim();
@@ -431,10 +424,11 @@ async function sendText(){
   }
 }
 
-/* Остальные обработчики (attach/file edit/delete/reactions) оставлены как были, без крупных изменений */
-attachBtn.onclick = ()=> filePicker.click();
-filePicker.onchange = (e)=> { const f = e.target.files?.[0]; if(f){ msgInput._pendingFile = f; } filePicker.value=''; };
+/* --- attach/file --- */
+attachBtn && (attachBtn.onclick = ()=> filePicker.click());
+filePicker && (filePicker.onchange = (e)=> { const f = e.target.files?.[0]; if(f){ msgInput._pendingFile = f; } filePicker.value=''; });
 
+/* --- edit/delete --- */
 async function editMessage(id){
   try{
     const ref = doc(db,'rooms',currentRoom,'messages',id);
@@ -451,6 +445,7 @@ async function deleteMessage(id){
   }catch(e){ console.error('deleteMessage error', e); alert('Нет прав на удаление'); }
 }
 
+/* --- reactions --- */
 async function addOrToggleReaction(id,emoji){
   const msgRef = doc(db,'rooms',currentRoom,'messages',id);
   try{
@@ -474,12 +469,14 @@ async function addOrToggleReaction(id,emoji){
   }catch(e){ console.error('addOrToggleReaction error', e); }
 }
 
-toggleRoomsBtn.onclick = ()=> openRoomsOverlay();
-closeRoomsMobile.onclick = ()=> closeRoomsOverlay();
-roomsBackdrop.onclick = ()=> closeRoomsOverlay();
+/* --- rooms overlay --- */
+toggleRoomsBtn && (toggleRoomsBtn.onclick = ()=> openRoomsOverlay());
+closeRoomsMobile && (closeRoomsMobile.onclick = ()=> closeRoomsOverlay());
+roomsBackdrop && (roomsBackdrop.onclick = ()=> closeRoomsOverlay());
 function openRoomsOverlay(){ roomsOverlay.classList.add('open'); roomsBackdrop.classList.add('show'); roomsOverlay.setAttribute('aria-hidden','false'); roomsBackdrop.setAttribute('aria-hidden','false'); renderRoomsList(); }
 function closeRoomsOverlay(){ roomsOverlay.classList.remove('open'); roomsBackdrop.classList.remove('show'); roomsOverlay.setAttribute('aria-hidden','true'); roomsBackdrop.setAttribute('aria-hidden','true'); }
 
+/* --- load user's rooms from Firestore --- */
 async function loadMyRoomsFromFirestore(){
   if(!user) return;
   try{
@@ -494,16 +491,9 @@ async function loadMyRoomsFromFirestore(){
   }catch(err){ console.error('loadMyRoomsFromFirestore error', err); }
 }
 
-document.getElementById('btnHome').onclick = ()=> renderRoomsList();
-document.getElementById('btnCreate').onclick = ()=> createRoomFlow();
-document.getElementById('btnSettings').onclick = ()=> openRoomsOverlay();
-createBtn.onclick = ()=> createRoomFlow();
-createBtnMobile.onclick = ()=> { createRoomFlow(); closeRoomsOverlay(); };
-joinBtn.onclick = async ()=> { const code=(joinCodeInput.value||'').trim().toUpperCase(); if(!code) return; await joinRoomByCode(code); };
-joinBtnMobile.onclick = async ()=> { const code=(joinCodeMobile.value||'').trim().toUpperCase(); if(!code) return; await joinRoomByCode(code); closeRoomsOverlay(); };
-
-saveRoomMeta.onclick = ()=> saveRoomMetaAll();
-saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); };
+/* --- save room meta --- */
+saveRoomMeta && (saveRoomMeta.onclick = ()=> saveRoomMetaAll());
+saveRoomMeta_m && (saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); });
 async function saveRoomMetaAll(){
   if(!currentRoom) return;
   const name = (roomNameInput.value || roomNameInput_m.value || '').trim().slice(0,60);
@@ -516,13 +506,96 @@ async function saveRoomMetaAll(){
   }catch(e){ console.error('saveRoomMetaAll error', e); alert('Не удалось сохранить'); }
 }
 
+/* --- save nick --- */
+if (saveNickBtn) saveNickBtn.onclick = saveNick;
+if (saveNickBtnMobile) saveNickBtnMobile.onclick = saveNick;
+function saveNick(){
+  nickname = (nicknameInput?.value || nicknameInputMobile?.value || 'Гость').trim().slice(0,32);
+  if (nicknameInput) nicknameInput.value = nickname;
+  if (nicknameInputMobile) nicknameInputMobile.value = nickname;
+  localStorage.setItem('crm_nick', nickname);
+  renderMessagesQuickMeta();
+}
+
+/* --- button wiring and robust join handlers (надежно обрабатываем случаи дубликатов id) --- */
+document.getElementById('btnHome')?.addEventListener('click', ()=> renderRoomsList());
+document.getElementById('btnCreate')?.addEventListener('click', ()=> createRoomFlow());
+document.getElementById('btnSettings')?.addEventListener('click', ()=> openRoomsOverlay());
+createBtn && (createBtn.onclick = ()=> createRoomFlow());
+createBtnMobile && (createBtnMobile.onclick = ()=> { createRoomFlow(); closeRoomsOverlay(); });
+
+async function tryJoinFromInput(inputEl){
+  const raw = (inputEl?.value || '').trim().toUpperCase();
+  console.log('tryJoinFromInput, raw=', raw);
+  if(!raw){ alert('Введите код комнаты'); return; }
+  if(!isValidRoomCode(raw)){ alert('Неверный формат кода. Код должен быть 6 символов A–Z (без I,L,O) и цифр 2–9.'); return; }
+  console.log('auth.currentUser=', auth.currentUser, 'user var=', user);
+  if(!auth.currentUser){
+    alert('Вы не авторизованы. Проверьте, включён Anonymous auth в Firebase Console.');
+    return;
+  }
+  await joinRoomByCode(raw);
+}
+
+/* Desktop: кнопка рядом с #joinCode */
+const joinBtnDesktop = document.getElementById('joinBtn');
+if (joinBtnDesktop) {
+  joinBtnDesktop.addEventListener('click', ()=> tryJoinFromInput(document.getElementById('joinCode')));
+}
+
+/* Mobile: сначала ищем контрол с id joinBtn_mobile, если нет — находим кнопку рядом с полем joinCode_mobile */
+let joinBtnMobileEl = document.getElementById('joinBtn_mobile');
+if (!joinBtnMobileEl) {
+  // попытка найти кнопку рядом с полем joinCode_mobile
+  const parent = document.getElementById('joinCode_mobile')?.closest('.field') || document.getElementById('joinCode_mobile')?.parentElement;
+  joinBtnMobileEl = parent ? parent.querySelector('button') : null;
+}
+if (joinBtnMobileEl) {
+  joinBtnMobileEl.addEventListener('click', ()=> { tryJoinFromInput(document.getElementById('joinCode_mobile')); closeRoomsOverlay(); });
+}
+
+/* Enter для обоих полей */
+document.getElementById('joinCode')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); }});
+document.getElementById('joinCode_mobile')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); closeRoomsOverlay(); }});
+
+/* --- auth state observer --- */
+onAuthStateChanged(auth, async (u) => {
+  console.log('onAuthStateChanged', u);
+  try {
+    if (!u) {
+      // попытка анонимного входа
+      try {
+        const res = await signInAnonymously(auth);
+        console.log('signed in anonymously', res?.user?.uid);
+      } catch(authErr){
+        console.error('signInAnonymously error', authErr);
+        // покажем понятное оповещение
+        alert('Не удалось выполнить анонимный вход. Проверьте настройки Authentication в Firebase Console (включен ли Anonymous?).');
+      }
+      return;
+    }
+    user = u;
+    if (nicknameInput) nicknameInput.value = nickname;
+    if (nicknameInputMobile) nicknameInputMobile.value = nickname;
+    renderRoomsList();
+    loadMyRoomsFromFirestore().catch(err => console.error('loadMyRoomsFromFirestore error', err));
+  } catch (err) {
+    console.error('Auth flow error', err);
+    alert('Ошибка авторизации: ' + (err.message || err.code || 'unknown'));
+  }
+});
+
+/* начальная инициализация UI */
 saveNick();
 renderRoomsList();
+
+/* выгрузка */
 window.addEventListener('beforeunload', ()=>{
   stopAllWatchers();
   if(unsubMessages) try{ unsubMessages(); }catch(e){ console.error(e) }
 });
 </script>
+
 
 </body>
 </html>
