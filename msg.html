@@ -36,6 +36,11 @@
   <div class="messages" id="messages" aria-live="polite"></div>
 
   <div class="composer" id="composer">
+    <div id="replyBar" class="reply-bar hidden">
+  <span id="replyText"></span>
+  <button id="cancelReply">✕</button>
+</div>
+
     <input class="input input-msg" id="msgInput" placeholder="Сообщение... (Enter — отправить)">
     <button class="btn" id="attachBtn" title="Прикрепить">📎</button>
     <button class="send" id="sendBtn" title="Отправить" aria-label="Send">
@@ -52,9 +57,9 @@
       <button class="btn" id="saveNick">OK</button>
     </div>
     <div class="field">
-      <input class="input" id="roomNameInput" placeholder="Название комнаты" style="flex:1">
-      <input class="input" id="roomAvatarInput" placeholder="URL аватарки" style="flex:1">
-      <button class="btn" id="saveRoomMeta">Сохранить</button>
+      <input class="input bubububebebe" id="roomNameInput" placeholder="Название комнаты" style="flex:1">
+      <input class="input bubububebebe" id="roomAvatarInput" placeholder="URL аватарки" style="flex:1">
+      <button class="btn bubububebebe" id="saveRoomMeta">Сохранить</button>
     </div>
     
     <div class="field">
@@ -207,7 +212,7 @@ function stopAllWatchers(){ Object.keys(roomWatchers).forEach(k=>{ try{ roomWatc
 function renderRoomsList(){
   const total = myRooms.reduce((s,r)=> s + (r.unreadCount||0), 0);
   if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none';
-  roomsEl.innerHTML='';
+  roomsEl && (roomsEl.innerHTML='');
   myRooms.forEach(room=>{
     ensureRoomWatcher(room.code);
     const div = document.createElement('div');
@@ -222,29 +227,31 @@ function renderRoomsList(){
     `;
     div.querySelector('.room-avatar').onclick = ()=> openRoom(room.code, room.name || ('Комната '+room.code));
     div.onclick = (e)=>{ if(e.target && e.target.classList && e.target.classList.contains('leave-btn')) return; openRoom(room.code, room.name || ('Комната '+room.code)); };
-    roomsEl.appendChild(div);
+    roomsEl && roomsEl.appendChild(div);
     const leaveBtn = div.querySelector('.leave-btn');
     leaveBtn.onclick = (ev)=>{ ev.stopPropagation(); removeFromMyRooms(leaveBtn.dataset.code); };
   });
 
-  roomsMobileList.innerHTML='';
-  myRooms.forEach(room=>{
-    const div = document.createElement('div');
-    div.className = 'room-item' + (currentRoom===room.code?' active':'');
-    div.style.marginBottom='6px';
-    div.innerHTML = `
-      <div class="room-avatar">${room.avatar?`<img src="${escapeHtml(room.avatar)}">`:escapeHtml((room.name||room.code).slice(0,2).toUpperCase())}</div>
-      <div style="flex:1">
-        <div class="room-title">${escapeHtml(room.name||('Комната '+room.code))}</div>
-        <div class="room-sub">Код: ${escapeHtml(room.code)}</div>
-      </div>
-      <button class="leave-btn" data-code="${escapeHtml(room.code)}">✕</button>
-    `;
-    div.onclick = (e)=>{ if(e.target && e.target.classList && e.target.classList.contains('leave-btn')) return; openRoom(room.code, room.name || ('Комната '+room.code)); closeRoomsOverlay(); };
-    roomsMobileList.appendChild(div);
-    const leaveBtn = div.querySelector('.leave-btn');
-    leaveBtn.onclick = (ev)=>{ ev.stopPropagation(); removeFromMyRooms(leaveBtn.dataset.code); };
-  });
+  if(roomsMobileList){
+    roomsMobileList.innerHTML='';
+    myRooms.forEach(room=>{
+      const div = document.createElement('div');
+      div.className = 'room-item' + (currentRoom===room.code?' active':'');
+      div.style.marginBottom='6px';
+      div.innerHTML = `
+        <div class="room-avatar">${room.avatar?`<img src="${escapeHtml(room.avatar)}">`:escapeHtml((room.name||room.code).slice(0,2).toUpperCase())}</div>
+        <div style="flex:1">
+          <div class="room-title">${escapeHtml(room.name||('Комната '+room.code))}</div>
+          <div class="room-sub">Код: ${escapeHtml(room.code)}</div>
+        </div>
+        <button class="leave-btn" data-code="${escapeHtml(room.code)}">✕</button>
+      `;
+      div.onclick = (e)=>{ if(e.target && e.target.classList && e.target.classList.contains('leave-btn')) return; openRoom(room.code, room.name || ('Комната '+room.code)); closeRoomsOverlay(); };
+      roomsMobileList.appendChild(div);
+      const leaveBtn = div.querySelector('.leave-btn');
+      leaveBtn.onclick = (ev)=>{ ev.stopPropagation(); removeFromMyRooms(leaveBtn.dataset.code); };
+    });
+  }
 }
 
 /* --- add/remove my rooms --- */
@@ -253,7 +260,7 @@ async function removeFromMyRooms(code){
   if(roomWatchers[code]){ try{ roomWatchers[code](); }catch(e){ console.error(e) } delete roomWatchers[code]; }
   persistMyRooms(); renderRoomsList();
   if(currentRoom === code){
-    currentRoom = null; messagesEl.innerHTML=''; roomTitle.textContent='Выберите комнату'; roomSub.textContent='Код не выбран'; shareCode.style.display='none';
+    currentRoom = null; if(messagesEl) messagesEl.innerHTML=''; if(roomTitle) roomTitle.textContent='Выберите комнату'; if(roomSub) roomSub.textContent='Код не выбран'; if(shareCode) shareCode.style.display='none';
     if(unsubMessages){ unsubMessages(); unsubMessages=null; }
   }
 }
@@ -298,31 +305,75 @@ async function joinRoomByCode(code){
   }
 }
 
+/* --- обновление шапки комнаты --- */
+function updateRoomHeader(roomObj){
+  if(!roomTitle || !roomSub) return;
+  roomTitle.textContent = roomObj.name || 'Без названия';
+  roomSub.textContent = 'Код: ' + currentRoom;
+
+  const headerLogo = document.querySelector('.header-logo');
+  if(headerLogo){
+    if(roomObj.avatar){
+      headerLogo.src = roomObj.avatar;
+      headerLogo.style.display = 'inline-block';
+    } else {
+      headerLogo.style.display = 'none'; // если аватара нет
+    }
+  }
+}
+
 /* --- открытие комнаты + подписка на сообщения --- */
 function openRoom(code,name){
-  currentRoom = code; roomTitle.textContent = name; roomSub.textContent = 'Код: ' + code;
-  shareCode.style.display='inline-block'; shareCode.textContent = 'Поделиться кодом: ' + code;
-  shareCode.onclick = ()=> navigator.clipboard?.writeText(code).then(()=>{ const prev = shareCode.textContent; shareCode.textContent='Скопировано!'; setTimeout(()=>shareCode.textContent = prev,1200); });
-  const roomObj = myRooms.find(r=> r.code===code);
-  if(roomObj){ roomObj.unreadCount = 0; persistMyRooms(); renderRoomsList(); roomNameInput.value=roomObj.name||''; roomAvatarInput.value=roomObj.avatar||''; roomNameInput_m.value=roomObj.name||''; roomAvatarInput_m.value=roomObj.avatar||''; }
+  currentRoom = code;
+
+  // Обновляем UI шапки и код шаринга
+  if(roomTitle) roomTitle.textContent = name || 'Комната';
+  if(roomSub) roomSub.textContent = 'Код: ' + code;
+  if(shareCode){
+    shareCode.style.display='inline-block';
+    shareCode.textContent = 'Поделиться кодом: ' + code;
+    shareCode.onclick = ()=> navigator.clipboard?.writeText(code).then(()=>{ const prev = shareCode.textContent; shareCode.textContent='Скопировано!'; setTimeout(()=>shareCode.textContent = prev,1200); }).catch(()=>{});
+  }
+
+  // Найдём в myRooms и сбросим непрочитанные + подставим в поля
+  const roomObj = myRooms.find(r=> r.code === code);
+  if(roomObj){
+    roomObj.unreadCount = 0;
+    persistMyRooms();
+    renderRoomsList();
+    if(roomNameInput) roomNameInput.value = roomObj.name || '';
+    if(roomAvatarInput) roomAvatarInput.value = roomObj.avatar || '';
+    if(roomNameInput_m) roomNameInput_m.value = roomObj.name || '';
+    if(roomAvatarInput_m) roomAvatarInput_m.value = roomObj.avatar || '';
+    // обновляем шапку (локально, еще раз)
+    updateRoomHeader(roomObj);
+  }
+
+  // отписываем старую подписку
   if(unsubMessages){ unsubMessages(); unsubMessages=null; }
-  const qMsgs = query(collection(db, 'rooms', code, 'messages'), orderBy('t','asc'));
-  unsubMessages = onSnapshot(qMsgs, (snap)=>{
-    messagesEl.innerHTML='';
-    snap.forEach(d => renderMessage(d.id, d.data()));
-    requestAnimationFrame(()=> messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }));
-    const lastDoc = snap.docs[snap.docs.length-1];
-    if(lastDoc){
-      const m = lastDoc.data();
-      const ts = m.t && typeof m.t.toMillis === 'function' ? m.t.toMillis() : Date.now();
-      const r = myRooms.find(rr => rr.code === code);
-      if(r){ r.lastSeen = ts; r.lastMsg = ts; persistMyRooms(); renderRoomsList(); }
-    }
-  }, err => { console.error('onSnapshot messages error', err); });
+
+  // Подписка на сообщения в комнате
+  try{
+    const qMsgs = query(collection(db, 'rooms', code, 'messages'), orderBy('t','asc'));
+    unsubMessages = onSnapshot(qMsgs, (snap)=>{
+      if(messagesEl) messagesEl.innerHTML='';
+      snap.forEach(d => renderMessage(d.id, d.data()));
+      requestAnimationFrame(()=> { if(messagesEl) messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }); });
+
+      const lastDoc = snap.docs[snap.docs.length-1];
+      if(lastDoc){
+        const m = lastDoc.data();
+        const ts = m.t && typeof m.t.toMillis === 'function' ? m.t.toMillis() : Date.now();
+        const r = myRooms.find(rr => rr.code === code);
+        if(r){ r.lastSeen = ts; r.lastMsg = ts; persistMyRooms(); renderRoomsList(); }
+      }
+    }, err => { console.error('onSnapshot messages error', err); });
+  }catch(e){ console.error('openRoom subscribe error', e); }
 }
 
 /* --- отображение сообщения --- */
 function renderMessage(id,m){
+  if(!messagesEl) return;
   if(m.sys){
     const wrap = document.createElement('div');
     wrap.className='bubble system';
@@ -473,8 +524,8 @@ async function addOrToggleReaction(id,emoji){
 toggleRoomsBtn && (toggleRoomsBtn.onclick = ()=> openRoomsOverlay());
 closeRoomsMobile && (closeRoomsMobile.onclick = ()=> closeRoomsOverlay());
 roomsBackdrop && (roomsBackdrop.onclick = ()=> closeRoomsOverlay());
-function openRoomsOverlay(){ roomsOverlay.classList.add('open'); roomsBackdrop.classList.add('show'); roomsOverlay.setAttribute('aria-hidden','false'); roomsBackdrop.setAttribute('aria-hidden','false'); renderRoomsList(); }
-function closeRoomsOverlay(){ roomsOverlay.classList.remove('open'); roomsBackdrop.classList.remove('show'); roomsOverlay.setAttribute('aria-hidden','true'); roomsBackdrop.setAttribute('aria-hidden','true'); }
+function openRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.add('open'); roomsBackdrop && roomsBackdrop.classList.add('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','false'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','false'); renderRoomsList(); }
+function closeRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.remove('open'); roomsBackdrop && roomsBackdrop.classList.remove('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','true'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','true'); }
 
 /* --- load user's rooms from Firestore --- */
 async function loadMyRoomsFromFirestore(){
@@ -491,19 +542,33 @@ async function loadMyRoomsFromFirestore(){
   }catch(err){ console.error('loadMyRoomsFromFirestore error', err); }
 }
 
-/* --- save room meta --- */
+/* --- сохранение метаданных комнаты --- */
 saveRoomMeta && (saveRoomMeta.onclick = ()=> saveRoomMetaAll());
 saveRoomMeta_m && (saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); });
 async function saveRoomMetaAll(){
   if(!currentRoom) return;
-  const name = (roomNameInput.value || roomNameInput_m.value || '').trim().slice(0,60);
-  const avatar = (roomAvatarInput.value || roomAvatarInput_m.value || '').trim();
+
+  const name = (roomNameInput?.value || roomNameInput_m?.value || '').trim().slice(0,60);
+  const avatar = (roomAvatarInput?.value || roomAvatarInput_m?.value || '').trim();
+
   try{
     await setDoc(doc(db,'rooms',currentRoom), { name: name||null, avatar: avatar||'' }, { merge:true });
-    const idx = myRooms.findIndex(r=>r.code===currentRoom);
-    if(idx>-1){ myRooms[idx].name = name||myRooms[idx].name; myRooms[idx].avatar = avatar; persistMyRooms(); renderRoomsList(); }
-    roomTitle.textContent = name || roomTitle.textContent;
-  }catch(e){ console.error('saveRoomMetaAll error', e); alert('Не удалось сохранить'); }
+
+    const idx = myRooms.findIndex(r => r.code === currentRoom);
+    if(idx > -1){
+      myRooms[idx].name = name || myRooms[idx].name;
+      myRooms[idx].avatar = avatar;
+      persistMyRooms();
+      renderRoomsList();
+
+      // Обновляем шапку
+      updateRoomHeader(myRooms[idx]);
+    }
+
+  }catch(e){
+    console.error('saveRoomMetaAll error', e);
+    alert('Не удалось сохранить');
+  }
 }
 
 /* --- save nick --- */
@@ -546,7 +611,6 @@ if (joinBtnDesktop) {
 /* Mobile: сначала ищем контрол с id joinBtn_mobile, если нет — находим кнопку рядом с полем joinCode_mobile */
 let joinBtnMobileEl = document.getElementById('joinBtn_mobile');
 if (!joinBtnMobileEl) {
-  // попытка найти кнопку рядом с полем joinCode_mobile
   const parent = document.getElementById('joinCode_mobile')?.closest('.field') || document.getElementById('joinCode_mobile')?.parentElement;
   joinBtnMobileEl = parent ? parent.querySelector('button') : null;
 }
@@ -569,7 +633,6 @@ onAuthStateChanged(auth, async (u) => {
         console.log('signed in anonymously', res?.user?.uid);
       } catch(authErr){
         console.error('signInAnonymously error', authErr);
-        // покажем понятное оповещение
         alert('Не удалось выполнить анонимный вход. Проверьте настройки Authentication в Firebase Console (включен ли Anonymous?).');
       }
       return;
@@ -594,7 +657,79 @@ window.addEventListener('beforeunload', ()=>{
   stopAllWatchers();
   if(unsubMessages) try{ unsubMessages(); }catch(e){ console.error(e) }
 });
+
+let touchStartX = 0;
+let touchCurrentX = 0;
+let swipeThreshold = 50; // пикселей для срабатывания
+let replyTarget = null;
+
+const replyBar = document.getElementById('replyBar');
+const replyText = document.getElementById('replyText');
+const cancelReply = document.getElementById('cancelReply');
+
+// Обработка свайпа на всех сообщениях
+document.querySelectorAll('.message').forEach(msg => {
+  msg.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    msg.style.transition = '';
+  });
+
+  msg.addEventListener('touchmove', e => {
+    touchCurrentX = e.touches[0].clientX;
+    let diffX = touchCurrentX - touchStartX;
+
+    if (diffX > 0) { // свайп вправо
+      msg.style.transform = `translateX(${diffX}px)`;
+      if (diffX > swipeThreshold) {
+        msg.classList.add('swipe-active');
+      } else {
+        msg.classList.remove('swipe-active');
+      }
+    }
+  });
+
+  msg.addEventListener('touchend', e => {
+    let diffX = touchCurrentX - touchStartX;
+    msg.style.transition = 'transform 0.25s ease';
+    msg.style.transform = 'translateX(0)';
+    
+    if (diffX > swipeThreshold) {
+      // Отмечаем сообщение как reply target
+      replyTarget = msg.dataset.id; // тут id сообщения из Firestore
+      replyText.textContent = msg.querySelector('.message-text').textContent.slice(0, 50) + '…';
+      replyBar.classList.remove('hidden');
+    }
+    msg.classList.remove('swipe-active');
+  });
+});
+
+// Кнопка отмены ответа
+cancelReply.addEventListener('click', () => {
+  replyTarget = null;
+  replyBar.classList.add('hidden');
+});
+
+// Пример отправки сообщения с replyTo
+async function sendMessage(text) {
+  if (!text.trim()) return;
+
+  const newMsg = {
+    text: text,
+    timestamp: Date.now(),
+    replyTo: replyTarget || null,
+    senderId: currentUserId
+  };
+
+  // Сюда вставь свой код Firestore
+  // await messagesCollection.add(newMsg);
+
+  // Сброс мини-бара
+  replyTarget = null;
+  replyBar.classList.add('hidden');
+}
+
 </script>
+
 
 
 </body>
