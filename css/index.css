@@ -80,22 +80,23 @@ body{
 }
 
 /* message bubbles — ШИРЕ + разумный минимум (фикс узости) */
-.bubble{
-  display:block;
-  max-width:96%;
-  min-width: clamp(260px, 52%, 720px); /* FIX: минимальная ширина на десктопах */
-  padding:10px 14px;                    /* чуть больше вертикальных отступов */
-  border-radius:12px;
-  line-height:0.8;
-  position:relative;
-  word-wrap:break-word;
-  overflow-wrap:anywhere;
-  white-space:pre-wrap;
-  transition:transform .16s,opacity .16s;
-  opacity:0; transform:translateY(6px);
-  font-size:15px;
-  color:var(--text);
-  box-shadow:var(--shadow);
+.bubble {
+  display: block;
+  max-width: 400px; /* компактная ширина на ПК */
+  min-width: 260px; /* минимальная ширина для небольших экранов */
+  padding: 10px 14px;
+  border-radius: 20px;
+  line-height: 1; /* чуть выше для читаемости */
+  position: relative;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  transition: transform 0.16s, opacity 0.16s;
+  opacity: 0;
+  transform: translateY(6px);
+  font-size: 17px;
+  color: var(--text);
+  box-shadow: var(--shadow);
 }
 
 /* видимость */
@@ -107,6 +108,9 @@ body{
 
 /* уменьшенные системные уведомления */
 .bubble.system{ background:transparent; box-shadow:none; color:var(--muted); padding:6px 10px; border-radius:10px; align-self:center; }
+
+.bubble .meta-name { font-weight:700; font-size:12px; color:var(--text); margin-bottom:6px; }
+.bubble .meta-time { position:absolute; right:10px; bottom:8px; font-size:11px; color:var(--muted); pointer-events:none; white-space:nowrap; }
 
 /* meta row (name + time) */
 .meta{ font-size:11px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:8px; }
@@ -232,7 +236,7 @@ body{
   .sidebar{ display:none; }
   .list{ display:none; }
   .chat-header .chat-title{ max-width:none; }
-  .bubble{ max-width:98%; min-width:72%; } /* FIX mobile: широкие пузырьки */
+  .bubble{ max-width:76%; min-width:72%; } /* FIX mobile: широкие пузырьки */
   .composer{ left:0; right:0; }
 }
 
@@ -261,9 +265,11 @@ a{color:inherit}
 /* Мини-бар для ответа */
 .reply-bar {
   position: fixed;
-  bottom: 70px; /* выше поля ввода */
-  left: 10px;
-  right: 10px;
+  bottom: 20px;    /* отступ от низа */
+  right: 20px;     /* отступ от правого края */
+  left: auto;      /* обязательно, чтобы не растягивалось по ширине */
+  width: auto;     /* или фиксированная ширина, например 300px */
+  max-width: 300px; 
   background: var(--surface-2);
   padding: 8px 12px;
   border-left: 4px solid var(--accent);
@@ -275,7 +281,7 @@ a{color:inherit}
   font-family: 'Futura', sans-serif;
   transition: transform 0.25s ease, opacity 0.25s ease;
   opacity: 1;
-  z-index: 1000;
+  z-index: 10000; /* очень большой, чтобы точно сверху всех */
 }
 
 .reply-bar.hidden {

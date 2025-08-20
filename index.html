@@ -158,7 +158,6 @@ const roomNameInput_m = document.getElementById('roomNameInput_m');
 const roomAvatarInput_m = document.getElementById('roomAvatarInput_m');
 const saveRoomMeta_m = document.getElementById('saveRoomMeta_m');
 
-/* переменные состояния */
 let user = null;
 let nickname = localStorage.getItem('crm_nick') || 'Гость';
 let currentRoom = null;
@@ -172,7 +171,6 @@ if (nicknameInputMobile) nicknameInputMobile.value = nickname;
 
 /* --- Утилиты --- */
 function isValidRoomCode(code){
-  // соответствует правилам: 6 символов, A-H J-N P-Z и цифры 2-9 (без I,L,O,0,1)
   return /^[A-HJ-NP-Z2-9]{6}$/.test(code);
 }
 function randCode(len=6){
@@ -180,7 +178,7 @@ function randCode(len=6){
   let out=''; crypto.getRandomValues(new Uint32Array(len)).forEach(n=> out+=alphabet[n%alphabet.length]);
   return out;
 }
-function escapeHtml(s){ if(!s && s!==0) return ''; return String(s).replace(/[&<>\"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
+function escapeHtml(s){ if(s === 0) return '0'; if(!s && s!==0) return ''; return String(s).replace(/[&<>\"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
 function fmtTime(ts){ try{ const d = new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function persistMyRooms(){ try{ localStorage.setItem('crm_myRooms', JSON.stringify(myRooms)); }catch(e){} }
 
@@ -212,7 +210,7 @@ function stopAllWatchers(){ Object.keys(roomWatchers).forEach(k=>{ try{ roomWatc
 function renderRoomsList(){
   const total = myRooms.reduce((s,r)=> s + (r.unreadCount||0), 0);
   if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none';
-  roomsEl && (roomsEl.innerHTML='');
+  if(roomsEl) roomsEl.innerHTML='';
   myRooms.forEach(room=>{
     ensureRoomWatcher(room.code);
     const div = document.createElement('div');
@@ -284,7 +282,7 @@ async function createRoomFlow(){
   }
 }
 
-/* --- присоединение по коду (с подробным логированием) --- */
+/* --- присоединение по коду --- */
 async function joinRoomByCode(code){
   try{
     console.log('joinRoomByCode called for', code, 'auth.currentUser=', auth.currentUser?.uid, 'user=', user?.uid);
@@ -317,7 +315,7 @@ function updateRoomHeader(roomObj){
       headerLogo.src = roomObj.avatar;
       headerLogo.style.display = 'inline-block';
     } else {
-      headerLogo.style.display = 'none'; // если аватара нет
+      headerLogo.style.display = 'none';
     }
   }
 }
@@ -326,7 +324,6 @@ function updateRoomHeader(roomObj){
 function openRoom(code,name){
   currentRoom = code;
 
-  // Обновляем UI шапки и код шаринга
   if(roomTitle) roomTitle.textContent = name || 'Комната';
   if(roomSub) roomSub.textContent = 'Код: ' + code;
   if(shareCode){
@@ -335,7 +332,6 @@ function openRoom(code,name){
     shareCode.onclick = ()=> navigator.clipboard?.writeText(code).then(()=>{ const prev = shareCode.textContent; shareCode.textContent='Скопировано!'; setTimeout(()=>shareCode.textContent = prev,1200); }).catch(()=>{});
   }
 
-  // Найдём в myRooms и сбросим непрочитанные + подставим в поля
   const roomObj = myRooms.find(r=> r.code === code);
   if(roomObj){
     roomObj.unreadCount = 0;
@@ -345,14 +341,11 @@ function openRoom(code,name){
     if(roomAvatarInput) roomAvatarInput.value = roomObj.avatar || '';
     if(roomNameInput_m) roomNameInput_m.value = roomObj.name || '';
     if(roomAvatarInput_m) roomAvatarInput_m.value = roomObj.avatar || '';
-    // обновляем шапку (локально, еще раз)
     updateRoomHeader(roomObj);
   }
 
-  // отписываем старую подписку
   if(unsubMessages){ unsubMessages(); unsubMessages=null; }
 
-  // Подписка на сообщения в комнате
   try{
     const qMsgs = query(collection(db, 'rooms', code, 'messages'), orderBy('t','asc'));
     unsubMessages = onSnapshot(qMsgs, (snap)=>{
@@ -371,9 +364,10 @@ function openRoom(code,name){
   }catch(e){ console.error('openRoom subscribe error', e); }
 }
 
-/* --- отображение сообщения --- */
+/* --- отображение сообщения (ИМЯ сверху, ВРЕМЯ в правом нижнем углу) --- */
 function renderMessage(id,m){
   if(!messagesEl) return;
+
   if(m.sys){
     const wrap = document.createElement('div');
     wrap.className='bubble system';
@@ -383,18 +377,23 @@ function renderMessage(id,m){
     requestAnimationFrame(()=> wrap.classList.add('show'));
     return;
   }
+
   const wrap = document.createElement('div');
   const mine = (m.uid === user?.uid);
-  wrap.className = 'bubble ' + (mine ? 'from-me' : 'from-other');
+  wrap.className = 'bubble message ' + (mine ? 'from-me' : 'from-other');
+  wrap.dataset.id = id;
+
   const meEmoji = m.reactionsBy && user?.uid ? m.reactionsBy[user.uid] : null;
-  const timeHtml = m.t ? `<span style="margin-left:auto;color:var(--muted);font-size:11px">${fmtTime((m.t && typeof m.t.toMillis === 'function')?m.t.toMillis():Date.now())}</span>` : '';
-  const nameHtml = `<span>${mine? 'Вы' : escapeHtml(m.name || 'Гость')}</span>`;
+  const timeText = m.t ? fmtTime((m.t && typeof m.t.toMillis === 'function')?m.t.toMillis():Date.now()) : '';
+  const nameText = mine? 'Вы' : (m.name ? escapeHtml(m.name) : 'Гость');
+
   const menuHtml = `<button class="msg-menu" data-id="${id}">⋮</button>
     <div class="actions" id="actions-${id}">
       ${mine?`<button data-act="edit" data-id="${id}">✏️ Редактировать</button>`:''}
       ${mine?`<button data-act="delete" data-id="${id}">🗑 Удалить</button>`:''}
       <button data-act="react" data-id="${id}">😊 Реакция</button>
     </div>`;
+
   const rx = m.reactions || {};
   const rxHtml = Object.entries(rx).filter(([e,c])=>c>0).map(([e,c])=>`<div class="react-chip ${meEmoji===e?'me':''}" data-emo="${e}" data-id="${id}"><span>${e}</span><span>${c}</span></div>`).join('');
   const picker = `<div class="picker" id="picker-${id}">
@@ -404,35 +403,92 @@ function renderMessage(id,m){
     <span data-emo="🔥" data-id="${id}">🔥</span>
     <span data-emo="👏" data-id="${id}">👏</span>
     <span data-emo="😮" data-id="${id}">😮</span>
+    <span data-emo="👎" data-id="${id}">👎</span>
+    <span data-emo="🤮" data-id="${id}">🤮</span>
+    <span data-emo="🤡" data-id="${id}">🤡</span>
   </div>`;
-  const textHTML = m.text ? `<div>${escapeHtml(m.text)}</div>` : '';
+
+  const textHTML = m.text ? `<div class="message-text">${escapeHtml(m.text)}</div>` : `<div class="message-text"></div>`;
   const mediaHTML = m.url ? `<div class="media">${ m.type?.startsWith('audio') ? `<audio controls src="${m.url}"></audio>` : `<img src="${m.url}" alt>` }</div>` : '';
-  wrap.innerHTML = `<div class="meta">${nameHtml}${timeHtml}</div>${menuHtml}${textHTML}${mediaHTML}<div class="reactions-row" id="rx-${id}">${rxHtml}</div>${picker}`;
+
+  // имя сверху, затем меню, затем текст/media, реакции и picker
+  wrap.innerHTML = `<div class="meta-name">${escapeHtml(nameText)}</div>${menuHtml}${textHTML}${mediaHTML}<div class="reactions-row" id="rx-${id}">${rxHtml}</div>${picker}`;
+
+  // добавляем время как отдельный блок (для абсолютного позиционирования)
+  if(timeText){
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'meta-time';
+    timeDiv.textContent = timeText;
+    wrap.appendChild(timeDiv);
+  }
+
   messagesEl.appendChild(wrap);
+
+  // menu/actions wiring
   const menuBtn = wrap.querySelector('.msg-menu');
-  const actions = wrap.querySelector('#actions-'+menuBtn.dataset.id);
-  menuBtn.onclick = (e)=>{ e.stopPropagation(); document.querySelectorAll('.actions').forEach(a=>a.classList.remove('open')); actions.classList.toggle('open'); };
-  wrap.addEventListener('click', ()=> actions.classList.remove('open'));
-  actions.querySelectorAll('button').forEach(b=>{
-    b.onclick = async (ev)=>{
-      ev.stopPropagation();
-      const act = b.dataset.act; const mid = b.dataset.id;
-      if(act==='react'){ togglePicker(mid); }
-      if(act==='edit'){ editMessage(mid); }
-      if(act==='delete'){ deleteMessage(mid); }
-      actions.classList.remove('open');
-    };
-  });
+  if(menuBtn){
+    const actions = wrap.querySelector('#actions-'+menuBtn.dataset.id);
+    menuBtn.onclick = (e)=>{ e.stopPropagation(); document.querySelectorAll('.actions').forEach(a=>a.classList.remove('open')); actions.classList.toggle('open'); };
+    wrap.addEventListener('click', ()=> { document.querySelectorAll('.actions').forEach(a=>a.classList.remove('open')); });
+    actions.querySelectorAll('button').forEach(b=>{
+      b.onclick = async (ev)=>{
+        ev.stopPropagation();
+        const act = b.dataset.act; const mid = b.dataset.id;
+        if(act==='react'){ togglePicker(mid); }
+        if(act==='edit'){ editMessage(mid); }
+        if(act==='delete'){ deleteMessage(mid); }
+        actions.classList.remove('open');
+      };
+    });
+  }
+
+  // reactions + picker wiring
   wrap.querySelectorAll('.react-chip').forEach(ch=>{
     ch.onclick = ()=> addOrToggleReaction(id, ch.dataset.emo);
   });
   wrap.querySelectorAll('#picker-'+id+' span').forEach(sp=>{
     sp.onclick = ()=>{ addOrToggleReaction(id, sp.dataset.emo); togglePicker(id,false); };
   });
-  wrap.addEventListener('contextmenu', (e)=>{ e.preventDefault(); actions.classList.add('open'); });
-  let pressTimer=null;
-  wrap.addEventListener('touchstart', ()=>{ pressTimer=setTimeout(()=>actions.classList.add('open'),450); }, {passive:true});
-  wrap.addEventListener('touchend', ()=>{ clearTimeout(pressTimer); }, {passive:true});
+
+  wrap.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); });
+
+  // --- TOUCH SWIPE HANDLERS (attach per message so dynamic elements are handled) ---
+  let touchStartX = 0, touchCurrentX = 0, pressTimer = null;
+  wrap.addEventListener('touchstart', (e)=>{
+    touchStartX = e.touches[0].clientX;
+    touchCurrentX = touchStartX;
+    wrap.style.transition = '';
+    // long-press to open actions
+    pressTimer = setTimeout(()=>{ const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); }, 450);
+  }, {passive:true});
+
+  wrap.addEventListener('touchmove', (e)=>{
+    touchCurrentX = e.touches[0].clientX;
+    let diffX = touchCurrentX - touchStartX;
+    if(diffX > 0){
+      wrap.style.transform = `translateX(${diffX}px)`;
+      if(diffX > 50) wrap.classList.add('swipe-active'); else wrap.classList.remove('swipe-active');
+    }
+    // if moved, cancel long-press
+    if(Math.abs(touchCurrentX - touchStartX) > 10 && pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+  }, {passive:true});
+
+  wrap.addEventListener('touchend', (e)=>{
+    clearTimeout(pressTimer); pressTimer = null;
+    let diffX = touchCurrentX - touchStartX;
+    wrap.style.transition = 'transform 0.25s ease';
+    wrap.style.transform = 'translateX(0)';
+    if(diffX > 50){
+      // set reply target and show replyBar
+      replyTarget = id;
+      const msgTextEl = wrap.querySelector('.message-text');
+      const preview = msgTextEl ? (msgTextEl.textContent || '').slice(0,50) : '';
+      if(replyText) replyText.textContent = preview + (preview.length>=50?'…':'');
+      if(replyBar) replyBar.classList.remove('hidden');
+    }
+    wrap.classList.remove('swipe-active');
+  }, {passive:true});
+
   requestAnimationFrame(()=> wrap.classList.add('show'));
 }
 
@@ -444,17 +500,11 @@ function togglePicker(id,force){
   if(typeof force==='boolean'){ el.classList.toggle('open', force); return; }
   el.classList.toggle('open');
 }
-function renderMessagesQuickMeta(){
-  document.querySelectorAll('.bubble .meta').forEach(m=>{
-    if(m.textContent.includes('Вы')) return;
-  });
-}
 
 /* --- send message --- */
 sendBtn && (sendBtn.onclick = sendText);
 msgInput && msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(); } });
 async function sendText(){
-  console.log('sendText called, currentRoom=', currentRoom, 'user=', user?.uid);
   if(!currentRoom){ alert('Сначала выберите комнату'); return; }
   if(!user){ alert('Вы не авторизованы. Проверьте Anonymous auth в Firebase Console.'); console.error('sendText: no user'); return; }
   const text = msgInput.value.trim();
@@ -560,8 +610,6 @@ async function saveRoomMetaAll(){
       myRooms[idx].avatar = avatar;
       persistMyRooms();
       renderRoomsList();
-
-      // Обновляем шапку
       updateRoomHeader(myRooms[idx]);
     }
 
@@ -571,18 +619,20 @@ async function saveRoomMetaAll(){
   }
 }
 
-/* --- save nick --- */
-if (saveNickBtn) saveNickBtn.onclick = saveNick;
-if (saveNickBtnMobile) saveNickBtnMobile.onclick = saveNick;
+/* --- save nick (синхронизация desktop + mobile + Enter) --- */
 function saveNick(){
-  nickname = (nicknameInput?.value || nicknameInputMobile?.value || 'Гость').trim().slice(0,32);
+  nickname = ( (nicknameInput && nicknameInput.value) || (nicknameInputMobile && nicknameInputMobile.value) || 'Гость' ).trim().slice(0,32);
   if (nicknameInput) nicknameInput.value = nickname;
   if (nicknameInputMobile) nicknameInputMobile.value = nickname;
   localStorage.setItem('crm_nick', nickname);
   renderMessagesQuickMeta();
 }
+if (saveNickBtn) saveNickBtn.addEventListener('click', saveNick);
+if (saveNickBtnMobile) saveNickBtnMobile.addEventListener('click', () => { saveNick(); closeRoomsOverlay(); });
+if (nicknameInput) nicknameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); }});
+if (nicknameInputMobile) nicknameInputMobile.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); closeRoomsOverlay(); }});
 
-/* --- button wiring and robust join handlers (надежно обрабатываем случаи дубликатов id) --- */
+/* --- button wiring and join handlers --- */
 document.getElementById('btnHome')?.addEventListener('click', ()=> renderRoomsList());
 document.getElementById('btnCreate')?.addEventListener('click', ()=> createRoomFlow());
 document.getElementById('btnSettings')?.addEventListener('click', ()=> openRoomsOverlay());
@@ -591,10 +641,8 @@ createBtnMobile && (createBtnMobile.onclick = ()=> { createRoomFlow(); closeRoom
 
 async function tryJoinFromInput(inputEl){
   const raw = (inputEl?.value || '').trim().toUpperCase();
-  console.log('tryJoinFromInput, raw=', raw);
   if(!raw){ alert('Введите код комнаты'); return; }
   if(!isValidRoomCode(raw)){ alert('Неверный формат кода. Код должен быть 6 символов A–Z (без I,L,O) и цифр 2–9.'); return; }
-  console.log('auth.currentUser=', auth.currentUser, 'user var=', user);
   if(!auth.currentUser){
     alert('Вы не авторизованы. Проверьте, включён Anonymous auth в Firebase Console.');
     return;
@@ -602,13 +650,13 @@ async function tryJoinFromInput(inputEl){
   await joinRoomByCode(raw);
 }
 
-/* Desktop: кнопка рядом с #joinCode */
+/* Desktop join */
 const joinBtnDesktop = document.getElementById('joinBtn');
 if (joinBtnDesktop) {
   joinBtnDesktop.addEventListener('click', ()=> tryJoinFromInput(document.getElementById('joinCode')));
 }
 
-/* Mobile: сначала ищем контрол с id joinBtn_mobile, если нет — находим кнопку рядом с полем joinCode_mobile */
+/* Mobile join: ищем кнопку рядом с полем */
 let joinBtnMobileEl = document.getElementById('joinBtn_mobile');
 if (!joinBtnMobileEl) {
   const parent = document.getElementById('joinCode_mobile')?.closest('.field') || document.getElementById('joinCode_mobile')?.parentElement;
@@ -627,7 +675,6 @@ onAuthStateChanged(auth, async (u) => {
   console.log('onAuthStateChanged', u);
   try {
     if (!u) {
-      // попытка анонимного входа
       try {
         const res = await signInAnonymously(auth);
         console.log('signed in anonymously', res?.user?.uid);
@@ -658,79 +705,22 @@ window.addEventListener('beforeunload', ()=>{
   if(unsubMessages) try{ unsubMessages(); }catch(e){ console.error(e) }
 });
 
-let touchStartX = 0;
-let touchCurrentX = 0;
-let swipeThreshold = 50; // пикселей для срабатывания
+/* --- reply mini-bar refs --- */
 let replyTarget = null;
-
 const replyBar = document.getElementById('replyBar');
 const replyText = document.getElementById('replyText');
 const cancelReply = document.getElementById('cancelReply');
+if(cancelReply) cancelReply.addEventListener('click', ()=>{ replyTarget = null; replyBar && replyBar.classList.add('hidden'); });
 
-// Обработка свайпа на всех сообщениях
-document.querySelectorAll('.message').forEach(msg => {
-  msg.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-    msg.style.transition = '';
-  });
-
-  msg.addEventListener('touchmove', e => {
-    touchCurrentX = e.touches[0].clientX;
-    let diffX = touchCurrentX - touchStartX;
-
-    if (diffX > 0) { // свайп вправо
-      msg.style.transform = `translateX(${diffX}px)`;
-      if (diffX > swipeThreshold) {
-        msg.classList.add('swipe-active');
-      } else {
-        msg.classList.remove('swipe-active');
-      }
-    }
-  });
-
-  msg.addEventListener('touchend', e => {
-    let diffX = touchCurrentX - touchStartX;
-    msg.style.transition = 'transform 0.25s ease';
-    msg.style.transform = 'translateX(0)';
-    
-    if (diffX > swipeThreshold) {
-      // Отмечаем сообщение как reply target
-      replyTarget = msg.dataset.id; // тут id сообщения из Firestore
-      replyText.textContent = msg.querySelector('.message-text').textContent.slice(0, 50) + '…';
-      replyBar.classList.remove('hidden');
-    }
-    msg.classList.remove('swipe-active');
-  });
-});
-
-// Кнопка отмены ответа
-cancelReply.addEventListener('click', () => {
-  replyTarget = null;
-  replyBar.classList.add('hidden');
-});
-
-// Пример отправки сообщения с replyTo
-async function sendMessage(text) {
-  if (!text.trim()) return;
-
-  const newMsg = {
-    text: text,
-    timestamp: Date.now(),
-    replyTo: replyTarget || null,
-    senderId: currentUserId
-  };
-
-  // Сюда вставь свой код Firestore
-  // await messagesCollection.add(newMsg);
-
-  // Сброс мини-бара
-  replyTarget = null;
-  replyBar.classList.add('hidden');
+/* вспомогательная функция */
+function renderMessagesQuickMeta(){
+  // placeholder for any lightweight meta refresh
 }
 
+/* --- utilities already used above --- */
+
+/* end of module */
 </script>
-
-
 
 </body>
 </html>
