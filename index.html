@@ -5,12 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="css/index.css" />
-
-
 <title>MessageWrite</title>
-
-
-
 </head>
 <body>
 <aside class="sidebar" aria-hidden="true">
@@ -104,7 +99,7 @@
 </section>
 
 <script type="module">
-/* Полный модульный скрипт — ставь вместо старого */
+
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, orderBy, onSnapshot, limit, runTransaction, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
@@ -127,7 +122,7 @@ const storage = getStorage(app);
 
 console.log('Firebase initialized', { projectId: firebaseConfig.projectId });
 
-/* === DOM refs === */
+
 const roomsEl = document.getElementById('rooms');
 const roomsMobileList = document.getElementById('roomsMobileList');
 const roomsOverlay = document.getElementById('roomsOverlay');
@@ -165,11 +160,10 @@ let unsubMessages = null;
 let myRooms = JSON.parse(localStorage.getItem('crm_myRooms') || '[]');
 const roomWatchers = {};
 
-/* инициализация ников в полях (если поля есть) */
+
 if (nicknameInput) nicknameInput.value = nickname;
 if (nicknameInputMobile) nicknameInputMobile.value = nickname;
 
-/* --- Утилиты --- */
 function isValidRoomCode(code){
   return /^[A-HJ-NP-Z2-9]{6}$/.test(code);
 }
@@ -182,7 +176,7 @@ function escapeHtml(s){ if(s === 0) return '0'; if(!s && s!==0) return ''; retur
 function fmtTime(ts){ try{ const d = new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function persistMyRooms(){ try{ localStorage.setItem('crm_myRooms', JSON.stringify(myRooms)); }catch(e){} }
 
-/* --- Watchers --- */
+
 function ensureRoomWatcher(code){
   if(roomWatchers[code]) return;
   try{
@@ -206,7 +200,7 @@ function ensureRoomWatcher(code){
 }
 function stopAllWatchers(){ Object.keys(roomWatchers).forEach(k=>{ try{ roomWatchers[k](); }catch(e){ console.error(e) } }); }
 
-/* --- UI: список комнат --- */
+
 function renderRoomsList(){
   const total = myRooms.reduce((s,r)=> s + (r.unreadCount||0), 0);
   if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none';
@@ -252,7 +246,7 @@ function renderRoomsList(){
   }
 }
 
-/* --- add/remove my rooms --- */
+
 async function removeFromMyRooms(code){
   myRooms = myRooms.filter(r=> r.code !== code);
   if(roomWatchers[code]){ try{ roomWatchers[code](); }catch(e){ console.error(e) } delete roomWatchers[code]; }
@@ -266,7 +260,7 @@ async function addToMyRooms(code,name,avatar){
   if(!myRooms.find(r=> r.code===code)){ myRooms.push({ code, name, avatar:avatar||'', unreadCount:0, lastSeen: Date.now() }); persistMyRooms(); renderRoomsList(); }
 }
 
-/* --- создание комнаты --- */
+
 async function createRoomFlow(){
   if(!user){ alert('Вы не авторизованы'); return; }
   const code = randCode();
@@ -282,7 +276,7 @@ async function createRoomFlow(){
   }
 }
 
-/* --- присоединение по коду --- */
+
 async function joinRoomByCode(code){
   try{
     console.log('joinRoomByCode called for', code, 'auth.currentUser=', auth.currentUser?.uid, 'user=', user?.uid);
@@ -303,18 +297,16 @@ async function joinRoomByCode(code){
   }
 }
 
-/* --- обновление шапки комнаты --- */
-/* --- обновление шапки комнаты --- */
-/* --- обновление шапки комнаты --- */
+
 function updateRoomHeader(roomObj){
-  console.log('updateRoomHeader called with:', roomObj); // Добавим лог для отладки
+  console.log('updateRoomHeader called with:', roomObj); 
   
   if(!roomTitle || !roomSub) {
     console.log('roomTitle or roomSub not found');
     return;
   }
   
-  // Обновляем название комнаты
+ 
   const newTitle = roomObj.name || ('Комната ' + currentRoom);
   console.log('Setting room title to:', newTitle);
   roomTitle.textContent = newTitle;
@@ -334,8 +326,7 @@ function updateRoomHeader(roomObj){
   }
 }
 
-/* --- открытие комнаты + подписка на сообщения --- */
-/* --- открытие комнаты + подписка на сообщения --- */
+
 function openRoom(code,name){
   currentRoom = code;
 
@@ -355,9 +346,9 @@ function openRoom(code,name){
     if(roomAvatarInput) roomAvatarInput.value = roomObj.avatar || '';
     if(roomNameInput_m) roomNameInput_m.value = roomObj.name || '';
     if(roomAvatarInput_m) roomAvatarInput_m.value = roomObj.avatar || '';
-    updateRoomHeader(roomObj); // ← Обновляем шапку с актуальными данными
+    updateRoomHeader(roomObj); 
   } else {
-    // Если комнаты нет в myRooms, используем переданное имя
+  
     updateRoomHeader({ name: name || ('Комната ' + code), avatar: '' });
   }
 
@@ -381,7 +372,7 @@ function openRoom(code,name){
   }catch(e){ console.error('openRoom subscribe error', e); }
 }
 
-/* --- отображение сообщения (ИМЯ сверху, ВРЕМЯ в правом нижнем углу) --- */
+
 function renderMessage(id,m){
   if(!messagesEl) return;
 
@@ -428,10 +419,10 @@ function renderMessage(id,m){
   const textHTML = m.text ? `<div class="message-text">${escapeHtml(m.text)}</div>` : `<div class="message-text"></div>`;
   const mediaHTML = m.url ? `<div class="media">${ m.type?.startsWith('audio') ? `<audio controls src="${m.url}"></audio>` : `<img src="${m.url}" alt>` }</div>` : '';
 
-  // имя сверху, затем меню, затем текст/media, реакции и picker
+ 
   wrap.innerHTML = `<div class="meta-name">${escapeHtml(nameText)}</div>${menuHtml}${textHTML}${mediaHTML}<div class="reactions-row" id="rx-${id}">${rxHtml}</div>${picker}`;
 
-  // добавляем время как отдельный блок (для абсолютного позиционирования)
+ 
   if(timeText){
     const timeDiv = document.createElement('div');
     timeDiv.className = 'meta-time';
@@ -441,7 +432,7 @@ function renderMessage(id,m){
 
   messagesEl.appendChild(wrap);
 
-  // menu/actions wiring
+  
   const menuBtn = wrap.querySelector('.msg-menu');
   if(menuBtn){
     const actions = wrap.querySelector('#actions-'+menuBtn.dataset.id);
@@ -459,7 +450,7 @@ function renderMessage(id,m){
     });
   }
 
-  // reactions + picker wiring
+  
   wrap.querySelectorAll('.react-chip').forEach(ch=>{
     ch.onclick = ()=> addOrToggleReaction(id, ch.dataset.emo);
   });
@@ -469,13 +460,13 @@ function renderMessage(id,m){
 
   wrap.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); });
 
-  // --- TOUCH SWIPE HANDLERS (attach per message so dynamic elements are handled) ---
+
   let touchStartX = 0, touchCurrentX = 0, pressTimer = null;
   wrap.addEventListener('touchstart', (e)=>{
     touchStartX = e.touches[0].clientX;
     touchCurrentX = touchStartX;
     wrap.style.transition = '';
-    // long-press to open actions
+  
     pressTimer = setTimeout(()=>{ const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); }, 450);
   }, {passive:true});
 
@@ -486,7 +477,7 @@ function renderMessage(id,m){
       wrap.style.transform = `translateX(${diffX}px)`;
       if(diffX > 50) wrap.classList.add('swipe-active'); else wrap.classList.remove('swipe-active');
     }
-    // if moved, cancel long-press
+   
     if(Math.abs(touchCurrentX - touchStartX) > 10 && pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
   }, {passive:true});
 
@@ -496,7 +487,7 @@ function renderMessage(id,m){
     wrap.style.transition = 'transform 0.25s ease';
     wrap.style.transform = 'translateX(0)';
     if(diffX > 50){
-      // set reply target and show replyBar
+
       replyTarget = id;
       const msgTextEl = wrap.querySelector('.message-text');
       const preview = msgTextEl ? (msgTextEl.textContent || '').slice(0,50) : '';
@@ -509,7 +500,6 @@ function renderMessage(id,m){
   requestAnimationFrame(()=> wrap.classList.add('show'));
 }
 
-/* --- picker --- */
 function togglePicker(id,force){
   const el = document.getElementById('picker-'+id);
   if(!el) return;
@@ -518,7 +508,7 @@ function togglePicker(id,force){
   el.classList.toggle('open');
 }
 
-/* --- send message --- */
+
 sendBtn && (sendBtn.onclick = sendText);
 msgInput && msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(); } });
 async function sendText(){
@@ -542,11 +532,10 @@ async function sendText(){
   }
 }
 
-/* --- attach/file --- */
 attachBtn && (attachBtn.onclick = ()=> filePicker.click());
 filePicker && (filePicker.onchange = (e)=> { const f = e.target.files?.[0]; if(f){ msgInput._pendingFile = f; } filePicker.value=''; });
 
-/* --- edit/delete --- */
+
 async function editMessage(id){
   try{
     const ref = doc(db,'rooms',currentRoom,'messages',id);
@@ -563,7 +552,7 @@ async function deleteMessage(id){
   }catch(e){ console.error('deleteMessage error', e); alert('Нет прав на удаление'); }
 }
 
-/* --- reactions --- */
+
 async function addOrToggleReaction(id,emoji){
   const msgRef = doc(db,'rooms',currentRoom,'messages',id);
   try{
@@ -587,14 +576,13 @@ async function addOrToggleReaction(id,emoji){
   }catch(e){ console.error('addOrToggleReaction error', e); }
 }
 
-/* --- rooms overlay --- */
 toggleRoomsBtn && (toggleRoomsBtn.onclick = ()=> openRoomsOverlay());
 closeRoomsMobile && (closeRoomsMobile.onclick = ()=> closeRoomsOverlay());
 roomsBackdrop && (roomsBackdrop.onclick = ()=> closeRoomsOverlay());
 function openRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.add('open'); roomsBackdrop && roomsBackdrop.classList.add('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','false'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','false'); renderRoomsList(); }
 function closeRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.remove('open'); roomsBackdrop && roomsBackdrop.classList.remove('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','true'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','true'); }
 
-/* --- load user's rooms from Firestore --- */
+
 async function loadMyRoomsFromFirestore(){
   if(!user) return;
   try{
@@ -610,14 +598,14 @@ async function loadMyRoomsFromFirestore(){
 }
 
 
-/* --- сохранение метаданных комнаты --- */
+
 saveRoomMeta && (saveRoomMeta.onclick = ()=> saveRoomMetaAll());
 saveRoomMeta_m && (saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); });
 
 async function saveRoomMetaAll(){
   if(!currentRoom) return;
 
-  // Берем ТОЧНО то, что введено пользователем
+
   const name = (roomNameInput_m?.value || roomNameInput_m?.value || '').trim().slice(0,60);
   const avatar = (roomAvatarInput_m?.value || roomAvatarInput_m?.value || '').trim();
 
@@ -625,13 +613,13 @@ async function saveRoomMetaAll(){
 
   try{
     await setDoc(doc(db,'rooms',currentRoom), { 
-      name: name || null, // Сохраняем именно то, что ввел пользователь
+      name: name || null, 
       avatar: avatar || '' 
     }, { merge: true });
 
     const idx = myRooms.findIndex(r => r.code === currentRoom);
     if(idx > -1){
-      myRooms[idx].name = name || myRooms[idx].name; // Сохраняем введенное название
+      myRooms[idx].name = name || myRooms[idx].name; 
       myRooms[idx].avatar = avatar;
       persistMyRooms();
       renderRoomsList();
@@ -644,15 +632,15 @@ async function saveRoomMetaAll(){
   }
 }
 
-/* --- save nick (синхронизация desktop + mobile + Enter) --- */
+
 function saveNick(){
-  // Определяем приоритетное поле на основе размера экрана
+ 
   const isMobile = window.innerWidth < 1000;
   
   let newNickname = '';
   
   if (isMobile) {
-    // Приоритет мобильному полю
+  
     if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
       newNickname = nicknameInputMobile.value.trim();
     } else if (nicknameInput && nicknameInput.value.trim()) {
@@ -661,7 +649,7 @@ function saveNick(){
       newNickname = 'Гость';
     }
   } else {
-    // Приоритет десктопному полю
+   
     if (nicknameInput && nicknameInput.value.trim()) {
       newNickname = nicknameInput.value.trim();
     } else if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
@@ -671,10 +659,10 @@ function saveNick(){
     }
   }
   
-  // Обрезаем до 32 символов
+
   nickname = newNickname.slice(0,32);
   
-  // Синхронизируем оба поля
+
   if (nicknameInput) nicknameInput.value = nickname;
   if (nicknameInputMobile) nicknameInputMobile.value = nickname;
   
@@ -688,7 +676,6 @@ if (saveNickBtnMobile) saveNickBtnMobile.addEventListener('click', () => { saveN
 if (nicknameInput) nicknameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); }});
 if (nicknameInputMobile) nicknameInputMobile.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); closeRoomsOverlay(); }});
 
-/* --- button wiring and join handlers --- */
 document.getElementById('btnHome')?.addEventListener('click', ()=> renderRoomsList());
 document.getElementById('btnCreate')?.addEventListener('click', ()=> createRoomFlow());
 document.getElementById('btnSettings')?.addEventListener('click', ()=> openRoomsOverlay());
@@ -706,13 +693,12 @@ async function tryJoinFromInput(inputEl){
   await joinRoomByCode(raw);
 }
 
-/* Desktop join */
+
 const joinBtnDesktop = document.getElementById('joinBtn');
 if (joinBtnDesktop) {
   joinBtnDesktop.addEventListener('click', ()=> tryJoinFromInput(document.getElementById('joinCode')));
 }
 
-/* Mobile join: ищем кнопку рядом с полем */
 let joinBtnMobileEl = document.getElementById('joinBtn_mobile');
 if (!joinBtnMobileEl) {
   const parent = document.getElementById('joinCode_mobile')?.closest('.field') || document.getElementById('joinCode_mobile')?.parentElement;
@@ -722,11 +708,10 @@ if (joinBtnMobileEl) {
   joinBtnMobileEl.addEventListener('click', ()=> { tryJoinFromInput(document.getElementById('joinCode_mobile')); closeRoomsOverlay(); });
 }
 
-/* Enter для обоих полей */
+
 document.getElementById('joinCode')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); }});
 document.getElementById('joinCode_mobile')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); closeRoomsOverlay(); }});
 
-/* --- auth state observer --- */
 onAuthStateChanged(auth, async (u) => {
   console.log('onAuthStateChanged', u);
   try {
@@ -751,29 +736,27 @@ onAuthStateChanged(auth, async (u) => {
   }
 });
 
-/* начальная инициализация UI */
 saveNick();
 renderRoomsList();
 
-/* выгрузка */
 window.addEventListener('beforeunload', ()=>{
   stopAllWatchers();
   if(unsubMessages) try{ unsubMessages(); }catch(e){ console.error(e) }
 });
 
-/* --- reply mini-bar refs --- */
+
 let replyTarget = null;
 const replyBar = document.getElementById('replyBar');
 const replyText = document.getElementById('replyText');
 const cancelReply = document.getElementById('cancelReply');
 if(cancelReply) cancelReply.addEventListener('click', ()=>{ replyTarget = null; replyBar && replyBar.classList.add('hidden'); });
 
-/* вспомогательная функция */
+
 function renderMessagesQuickMeta(){
-  // placeholder for any lightweight meta refresh
+
 }
 
-/* end of module */
+
 </script>
 
 </body>
