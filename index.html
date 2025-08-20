@@ -79,8 +79,8 @@
   </div>
   <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
     <div class="field">
-      <input class="input" id="nickname_mobile" placeholder="Ник" style="flex:1">
-      <button class="btn" id="saveNick_mobile">OK</button>
+      <input class="input bubububebebe" id="nickname_mobile" placeholder="Ник" style="flex:1">
+      <button class="btn bubububebebe" id="saveNick_mobile">OK</button>
     </div>
     <div class="field">
       <div class="container-with-buttons">
@@ -304,27 +304,41 @@ async function joinRoomByCode(code){
 }
 
 /* --- обновление шапки комнаты --- */
+/* --- обновление шапки комнаты --- */
+/* --- обновление шапки комнаты --- */
 function updateRoomHeader(roomObj){
-  if(!roomTitle || !roomSub) return;
-  roomTitle.textContent = roomObj.name || 'Без названия';
+  console.log('updateRoomHeader called with:', roomObj); // Добавим лог для отладки
+  
+  if(!roomTitle || !roomSub) {
+    console.log('roomTitle or roomSub not found');
+    return;
+  }
+  
+  // Обновляем название комнаты
+  const newTitle = roomObj.name || ('Комната ' + currentRoom);
+  console.log('Setting room title to:', newTitle);
+  roomTitle.textContent = newTitle;
+  
   roomSub.textContent = 'Код: ' + currentRoom;
 
   const headerLogo = document.querySelector('.header-logo');
   if(headerLogo){
-    if(roomObj.avatar){
+    if(roomObj.avatar && roomObj.avatar.trim() !== ''){
+      console.log('Setting avatar to:', roomObj.avatar);
       headerLogo.src = roomObj.avatar;
       headerLogo.style.display = 'inline-block';
     } else {
+      console.log('Hiding avatar');
       headerLogo.style.display = 'none';
     }
   }
 }
 
 /* --- открытие комнаты + подписка на сообщения --- */
+/* --- открытие комнаты + подписка на сообщения --- */
 function openRoom(code,name){
   currentRoom = code;
 
-  if(roomTitle) roomTitle.textContent = name || 'Комната';
   if(roomSub) roomSub.textContent = 'Код: ' + code;
   if(shareCode){
     shareCode.style.display='inline-block';
@@ -341,7 +355,10 @@ function openRoom(code,name){
     if(roomAvatarInput) roomAvatarInput.value = roomObj.avatar || '';
     if(roomNameInput_m) roomNameInput_m.value = roomObj.name || '';
     if(roomAvatarInput_m) roomAvatarInput_m.value = roomObj.avatar || '';
-    updateRoomHeader(roomObj);
+    updateRoomHeader(roomObj); // ← Обновляем шапку с актуальными данными
+  } else {
+    // Если комнаты нет в myRooms, используем переданное имя
+    updateRoomHeader({ name: name || ('Комната ' + code), avatar: '' });
   }
 
   if(unsubMessages){ unsubMessages(); unsubMessages=null; }
@@ -592,21 +609,29 @@ async function loadMyRoomsFromFirestore(){
   }catch(err){ console.error('loadMyRoomsFromFirestore error', err); }
 }
 
+
 /* --- сохранение метаданных комнаты --- */
 saveRoomMeta && (saveRoomMeta.onclick = ()=> saveRoomMetaAll());
 saveRoomMeta_m && (saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); });
+
 async function saveRoomMetaAll(){
   if(!currentRoom) return;
 
-  const name = (roomNameInput?.value || roomNameInput_m?.value || '').trim().slice(0,60);
-  const avatar = (roomAvatarInput?.value || roomAvatarInput_m?.value || '').trim();
+  // Берем ТОЧНО то, что введено пользователем
+  const name = (roomNameInput_m?.value || roomNameInput_m?.value || '').trim().slice(0,60);
+  const avatar = (roomAvatarInput_m?.value || roomAvatarInput_m?.value || '').trim();
+
+  console.log('Saving exact user input:', { name, avatar });
 
   try{
-    await setDoc(doc(db,'rooms',currentRoom), { name: name||null, avatar: avatar||'' }, { merge:true });
+    await setDoc(doc(db,'rooms',currentRoom), { 
+      name: name || null, // Сохраняем именно то, что ввел пользователь
+      avatar: avatar || '' 
+    }, { merge: true });
 
     const idx = myRooms.findIndex(r => r.code === currentRoom);
     if(idx > -1){
-      myRooms[idx].name = name || myRooms[idx].name;
+      myRooms[idx].name = name || myRooms[idx].name; // Сохраняем введенное название
       myRooms[idx].avatar = avatar;
       persistMyRooms();
       renderRoomsList();
@@ -621,11 +646,42 @@ async function saveRoomMetaAll(){
 
 /* --- save nick (синхронизация desktop + mobile + Enter) --- */
 function saveNick(){
-  nickname = ( (nicknameInput && nicknameInput.value) || (nicknameInputMobile && nicknameInputMobile.value) || 'Гость' ).trim().slice(0,32);
+  // Определяем приоритетное поле на основе размера экрана
+  const isMobile = window.innerWidth < 1000;
+  
+  let newNickname = '';
+  
+  if (isMobile) {
+    // Приоритет мобильному полю
+    if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
+      newNickname = nicknameInputMobile.value.trim();
+    } else if (nicknameInput && nicknameInput.value.trim()) {
+      newNickname = nicknameInput.value.trim();
+    } else {
+      newNickname = 'Гость';
+    }
+  } else {
+    // Приоритет десктопному полю
+    if (nicknameInput && nicknameInput.value.trim()) {
+      newNickname = nicknameInput.value.trim();
+    } else if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
+      newNickname = nicknameInputMobile.value.trim();
+    } else {
+      newNickname = 'Гость';
+    }
+  }
+  
+  // Обрезаем до 32 символов
+  nickname = newNickname.slice(0,32);
+  
+  // Синхронизируем оба поля
   if (nicknameInput) nicknameInput.value = nickname;
   if (nicknameInputMobile) nicknameInputMobile.value = nickname;
+  
   localStorage.setItem('crm_nick', nickname);
   renderMessagesQuickMeta();
+  
+  console.log('Nick saved:', nickname, 'priority:', isMobile ? 'mobile' : 'desktop');
 }
 if (saveNickBtn) saveNickBtn.addEventListener('click', saveNick);
 if (saveNickBtnMobile) saveNickBtnMobile.addEventListener('click', () => { saveNick(); closeRoomsOverlay(); });
@@ -641,7 +697,7 @@ createBtnMobile && (createBtnMobile.onclick = ()=> { createRoomFlow(); closeRoom
 
 async function tryJoinFromInput(inputEl){
   const raw = (inputEl?.value || '').trim().toUpperCase();
-  if(!raw){ alert('Введите код комнаты'); return; }
+  if(!raw){ alert('Введите код комната'); return; }
   if(!isValidRoomCode(raw)){ alert('Неверный формат кода. Код должен быть 6 символов A–Z (без I,L,O) и цифр 2–9.'); return; }
   if(!auth.currentUser){
     alert('Вы не авторизованы. Проверьте, включён Anonymous auth в Firebase Console.');
@@ -716,8 +772,6 @@ if(cancelReply) cancelReply.addEventListener('click', ()=>{ replyTarget = null; 
 function renderMessagesQuickMeta(){
   // placeholder for any lightweight meta refresh
 }
-
-/* --- utilities already used above --- */
 
 /* end of module */
 </script>

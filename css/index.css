@@ -306,3 +306,32 @@ a{color:inherit}
 .message.swipe-active {
   background: rgba(58, 58, 58, 0.3);
 }
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.read-status {
+  display: flex;
+  align-items: center;
+}
+
+.read-dot, .delivered-dot {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.read-dot {
+  color: #4CAF50;
+}
+
+.delivered-dot {
+  color: #9E9E9E;
+}
+
+.bubble.from-me .read-status {
+  margin-left: auto;
+}
