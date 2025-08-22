@@ -31,18 +31,24 @@
   <div class="messages" id="messages" aria-live="polite"></div>
 
   <div class="composer" id="composer">
+  <div class="chat-input-container">
     <div id="replyBar" class="reply-bar hidden">
-  <span id="replyText"></span>
-  <button id="cancelReply">✕</button>
-</div>
-
+      <span id="replyText"></span>
+      <button id="cancelReply">✕</button>
+    </div>
+<button class="btnsk" id="attachBtn" title="Прикрепить">📎</button>
     <input class="input input-msg" id="msgInput" placeholder="Сообщение... (Enter — отправить)">
-    <button class="btn" id="attachBtn" title="Прикрепить">📎</button>
+    
     <button class="send" id="sendBtn" title="Отправить" aria-label="Send">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="white">
+        <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+      </svg>
     </button>
     <input type="file" id="filePicker" accept="image/*,audio/*" hidden>
   </div>
+</div>
+
+
 </main>
 
 <section class="list" id="desktopList">
@@ -99,7 +105,7 @@
 </section>
 
 <script type="module">
-
+/* ============================== Firebase init ============================== */
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, orderBy, onSnapshot, limit, runTransaction, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
@@ -122,7 +128,7 @@ const storage = getStorage(app);
 
 console.log('Firebase initialized', { projectId: firebaseConfig.projectId });
 
-
+/* ============================== DOM refs ============================== */
 const roomsEl = document.getElementById('rooms');
 const roomsMobileList = document.getElementById('roomsMobileList');
 const roomsOverlay = document.getElementById('roomsOverlay');
@@ -153,20 +159,25 @@ const roomNameInput_m = document.getElementById('roomNameInput_m');
 const roomAvatarInput_m = document.getElementById('roomAvatarInput_m');
 const saveRoomMeta_m = document.getElementById('saveRoomMeta_m');
 
+/* ====== элементы reply bar (должны быть в разметке) ====== */
+const replyBar = document.getElementById('replyBar');
+const replyText = document.getElementById('replyText');
+const cancelReply = document.getElementById('cancelReply');
+
+/* ============================== State ============================== */
 let user = null;
 let nickname = localStorage.getItem('crm_nick') || 'Гость';
 let currentRoom = null;
 let unsubMessages = null;
 let myRooms = JSON.parse(localStorage.getItem('crm_myRooms') || '[]');
 const roomWatchers = {};
-
+let replyTarget = null; // ID сообщения, на которое отвечаем
 
 if (nicknameInput) nicknameInput.value = nickname;
 if (nicknameInputMobile) nicknameInputMobile.value = nickname;
 
-function isValidRoomCode(code){
-  return /^[A-HJ-NP-Z2-9]{6}$/.test(code);
-}
+/* ============================== Utils ============================== */
+function isValidRoomCode(code){ return /^[A-HJ-NP-Z2-9]{6}$/.test(code); }
 function randCode(len=6){
   const alphabet='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let out=''; crypto.getRandomValues(new Uint32Array(len)).forEach(n=> out+=alphabet[n%alphabet.length]);
@@ -176,12 +187,50 @@ function escapeHtml(s){ if(s === 0) return '0'; if(!s && s!==0) return ''; retur
 function fmtTime(ts){ try{ const d = new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function persistMyRooms(){ try{ localStorage.setItem('crm_myRooms', JSON.stringify(myRooms)); }catch(e){} }
 
+/* ============================== Reply helpers ============================== */
+function setReplyTarget(messageId, previewStr){
+  replyTarget = messageId;
+  if(replyText){
+    const s = (previewStr || '').trim();
+    replyText.textContent = s.length>80 ? s.slice(0,80)+'…' : s;
+  }
+  replyBar && replyBar.classList.remove('hidden');
+}
+function clearReplyTarget(){
+  replyTarget = null;
+  replyBar && replyBar.classList.add('hidden');
+}
+cancelReply && cancelReply.addEventListener('click', clearReplyTarget);
 
+/* прокрутить/подсветить сообщение по ID */
+function scrollToMessage(messageId){
+  if(!messagesEl) return;
+  const tgt = messagesEl.querySelector(`.bubble.message[data-id="${CSS.escape(messageId)}"]`);
+  if(!tgt) return;
+  tgt.classList.add('ping');
+  tgt.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(()=> tgt.classList.remove('ping'), 1200);
+}
+
+/* собрать данные превью для сохранения в Firestore */
+function buildReplyPayloadFromDOM(messageId){
+  const el = messagesEl?.querySelector(`.bubble.message[data-id="${CSS.escape(messageId)}"]`);
+  if(!el) return null;
+  const txt = el.querySelector('.message-text')?.textContent || '';
+  const author = el.querySelector('.meta-name')?.textContent || 'Сообщение';
+  return {
+    id: messageId,
+    text: String(txt).slice(0, 500),
+    name: String(author).slice(0, 60)
+  };
+}
+
+/* ============================== Room watchers ============================== */
 function ensureRoomWatcher(code){
   if(roomWatchers[code]) return;
   try{
-    const q = query(collection(db,'rooms',code,'messages'), orderBy('t','desc'), limit(1));
-    const unsub = onSnapshot(q, (snap) => {
+    const qy = query(collection(db,'rooms',code,'messages'), orderBy('t','desc'), limit(1));
+    const unsub = onSnapshot(qy, (snap) => {
       snap.forEach(d => {
         const m = d.data();
         const room = myRooms.find(r => r.code === code);
@@ -200,10 +249,10 @@ function ensureRoomWatcher(code){
 }
 function stopAllWatchers(){ Object.keys(roomWatchers).forEach(k=>{ try{ roomWatchers[k](); }catch(e){ console.error(e) } }); }
 
-
+/* ============================== Rooms list render ============================== */
 function renderRoomsList(){
   const total = myRooms.reduce((s,r)=> s + (r.unreadCount||0), 0);
-  if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none';
+  if(totalUnreadEl){ if(total>0){ totalUnreadEl.style.display='flex'; totalUnreadEl.textContent = total>99?'99+':String(total); } else totalUnreadEl.style.display='none'; }
   if(roomsEl) roomsEl.innerHTML='';
   myRooms.forEach(room=>{
     ensureRoomWatcher(room.code);
@@ -246,7 +295,6 @@ function renderRoomsList(){
   }
 }
 
-
 async function removeFromMyRooms(code){
   myRooms = myRooms.filter(r=> r.code !== code);
   if(roomWatchers[code]){ try{ roomWatchers[code](); }catch(e){ console.error(e) } delete roomWatchers[code]; }
@@ -260,7 +308,7 @@ async function addToMyRooms(code,name,avatar){
   if(!myRooms.find(r=> r.code===code)){ myRooms.push({ code, name, avatar:avatar||'', unreadCount:0, lastSeen: Date.now() }); persistMyRooms(); renderRoomsList(); }
 }
 
-
+/* ============================== Create / Join ============================== */
 async function createRoomFlow(){
   if(!user){ alert('Вы не авторизованы'); return; }
   const code = randCode();
@@ -276,19 +324,12 @@ async function createRoomFlow(){
   }
 }
 
-
 async function joinRoomByCode(code){
   try{
-    console.log('joinRoomByCode called for', code, 'auth.currentUser=', auth.currentUser?.uid, 'user=', user?.uid);
     const roomRef = doc(db, 'rooms', code);
     const snap = await getDoc(roomRef);
-    console.log('getDoc result for', roomRef.path, 'exists=', snap.exists(), snap);
-    if(!snap.exists()) {
-      alert('Комната не найдена (либо её нет, либо у вас нет прав читать).');
-      return;
-    }
+    if(!snap.exists()) { alert('Комната не найдена (либо её нет, либо у вас нет прав читать).'); return; }
     const data = snap.data();
-    console.log('room data:', data);
     await addToMyRooms(code, data.name || ('Комната '+code), data.avatar||'');
     openRoom(code, data.name || ('Комната '+code));
   }catch(e){
@@ -297,36 +338,25 @@ async function joinRoomByCode(code){
   }
 }
 
-
+/* ============================== Header ============================== */
 function updateRoomHeader(roomObj){
-  console.log('updateRoomHeader called with:', roomObj); 
-  
-  if(!roomTitle || !roomSub) {
-    console.log('roomTitle or roomSub not found');
-    return;
-  }
-  
- 
+  if(!roomTitle || !roomSub) return;
   const newTitle = roomObj.name || ('Комната ' + currentRoom);
-  console.log('Setting room title to:', newTitle);
   roomTitle.textContent = newTitle;
-  
   roomSub.textContent = 'Код: ' + currentRoom;
 
   const headerLogo = document.querySelector('.header-logo');
   if(headerLogo){
     if(roomObj.avatar && roomObj.avatar.trim() !== ''){
-      console.log('Setting avatar to:', roomObj.avatar);
       headerLogo.src = roomObj.avatar;
       headerLogo.style.display = 'inline-block';
     } else {
-      console.log('Hiding avatar');
       headerLogo.style.display = 'none';
     }
   }
 }
 
-
+/* ============================== Open room / messages stream ============================== */
 function openRoom(code,name){
   currentRoom = code;
 
@@ -346,21 +376,18 @@ function openRoom(code,name){
     if(roomAvatarInput) roomAvatarInput.value = roomObj.avatar || '';
     if(roomNameInput_m) roomNameInput_m.value = roomObj.name || '';
     if(roomAvatarInput_m) roomAvatarInput_m.value = roomObj.avatar || '';
-    updateRoomHeader(roomObj); 
+    updateRoomHeader(roomObj);
   } else {
-  
     updateRoomHeader({ name: name || ('Комната ' + code), avatar: '' });
   }
 
   if(unsubMessages){ unsubMessages(); unsubMessages=null; }
-
   try{
     const qMsgs = query(collection(db, 'rooms', code, 'messages'), orderBy('t','asc'));
     unsubMessages = onSnapshot(qMsgs, (snap)=>{
       if(messagesEl) messagesEl.innerHTML='';
       snap.forEach(d => renderMessage(d.id, d.data()));
       requestAnimationFrame(()=> { if(messagesEl) messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }); });
-
       const lastDoc = snap.docs[snap.docs.length-1];
       if(lastDoc){
         const m = lastDoc.data();
@@ -372,7 +399,7 @@ function openRoom(code,name){
   }catch(e){ console.error('openRoom subscribe error', e); }
 }
 
-
+/* ============================== Render message (with reply) ============================== */
 function renderMessage(id,m){
   if(!messagesEl) return;
 
@@ -395,8 +422,10 @@ function renderMessage(id,m){
   const timeText = m.t ? fmtTime((m.t && typeof m.t.toMillis === 'function')?m.t.toMillis():Date.now()) : '';
   const nameText = mine? 'Вы' : (m.name ? escapeHtml(m.name) : 'Гость');
 
+  /* кнопки меню (добавил "reply") */
   const menuHtml = `<button class="msg-menu" data-id="${id}">⋮</button>
     <div class="actions" id="actions-${id}">
+      <button data-act="reply" data-id="${id}">↩️ Ответить</button>
       ${mine?`<button data-act="edit" data-id="${id}">✏️ Редактировать</button>`:''}
       ${mine?`<button data-act="delete" data-id="${id}">🗑 Удалить</button>`:''}
       <button data-act="react" data-id="${id}">😊 Реакция</button>
@@ -419,10 +448,29 @@ function renderMessage(id,m){
   const textHTML = m.text ? `<div class="message-text">${escapeHtml(m.text)}</div>` : `<div class="message-text"></div>`;
   const mediaHTML = m.url ? `<div class="media">${ m.type?.startsWith('audio') ? `<audio controls src="${m.url}"></audio>` : `<img src="${m.url}" alt>` }</div>` : '';
 
- 
-  wrap.innerHTML = `<div class="meta-name">${escapeHtml(nameText)}</div>${menuHtml}${textHTML}${mediaHTML}<div class="reactions-row" id="rx-${id}">${rxHtml}</div>${picker}`;
+let replyHTML = '';
+  if (m.reply && m.reply.name && m.reply.text) {
+    replyHTML = `
+      <div class="reply-preview" data-reply-id="${escapeHtml(m.reply.id)}">
+        <div class="reply-author">${escapeHtml(m.reply.name)}</div>
+        <div class="reply-snippet">${escapeHtml(m.reply.text)}</div>
+      </div>
+    `;
+  }
 
- 
+  wrap.innerHTML = `
+  <div class="message-header">
+    <div class="meta-name">${nameText}</div>
+    ${menuHtml}
+  </div>
+  ${replyHTML}
+  ${textHTML}
+  ${mediaHTML}
+  <div class="reactions-row">${rxHtml}</div>
+  ${picker}
+`;
+
+
   if(timeText){
     const timeDiv = document.createElement('div');
     timeDiv.className = 'meta-time';
@@ -432,7 +480,16 @@ function renderMessage(id,m){
 
   messagesEl.appendChild(wrap);
 
-  
+  /* клик по превью ответа — скролл к исходному сообщению */
+  const replyQuote = wrap.querySelector('.reply-quote');
+  if(replyQuote){
+    replyQuote.addEventListener('click', (e)=>{
+      const rid = replyQuote.getAttribute('data-reply-id');
+      if(rid) scrollToMessage(rid);
+    });
+  }
+
+  /* меню */
   const menuBtn = wrap.querySelector('.msg-menu');
   if(menuBtn){
     const actions = wrap.querySelector('#actions-'+menuBtn.dataset.id);
@@ -445,12 +502,18 @@ function renderMessage(id,m){
         if(act==='react'){ togglePicker(mid); }
         if(act==='edit'){ editMessage(mid); }
         if(act==='delete'){ deleteMessage(mid); }
+        if(act==='reply'){
+          const msgTextEl = wrap.querySelector('.message-text');
+          const preview = msgTextEl ? (msgTextEl.textContent || '') : '';
+          setReplyTarget(mid, preview);
+          msgInput?.focus();
+        }
         actions.classList.remove('open');
       };
     });
   }
 
-  
+  /* реакции */
   wrap.querySelectorAll('.react-chip').forEach(ch=>{
     ch.onclick = ()=> addOrToggleReaction(id, ch.dataset.emo);
   });
@@ -458,15 +521,15 @@ function renderMessage(id,m){
     sp.onclick = ()=>{ addOrToggleReaction(id, sp.dataset.emo); togglePicker(id,false); };
   });
 
+  /* контекстное меню по долгому тапу/ПКМ */
   wrap.addEventListener('contextmenu', (e)=>{ e.preventDefault(); const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); });
 
-
+  /* свайп вправо — установить replyTarget (мобильный жест) */
   let touchStartX = 0, touchCurrentX = 0, pressTimer = null;
   wrap.addEventListener('touchstart', (e)=>{
     touchStartX = e.touches[0].clientX;
     touchCurrentX = touchStartX;
     wrap.style.transition = '';
-  
     pressTimer = setTimeout(()=>{ const actions = wrap.querySelector('.actions'); if(actions) actions.classList.add('open'); }, 450);
   }, {passive:true});
 
@@ -477,7 +540,6 @@ function renderMessage(id,m){
       wrap.style.transform = `translateX(${diffX}px)`;
       if(diffX > 50) wrap.classList.add('swipe-active'); else wrap.classList.remove('swipe-active');
     }
-   
     if(Math.abs(touchCurrentX - touchStartX) > 10 && pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
   }, {passive:true});
 
@@ -487,12 +549,9 @@ function renderMessage(id,m){
     wrap.style.transition = 'transform 0.25s ease';
     wrap.style.transform = 'translateX(0)';
     if(diffX > 50){
-
-      replyTarget = id;
       const msgTextEl = wrap.querySelector('.message-text');
-      const preview = msgTextEl ? (msgTextEl.textContent || '').slice(0,50) : '';
-      if(replyText) replyText.textContent = preview + (preview.length>=50?'…':'');
-      if(replyBar) replyBar.classList.remove('hidden');
+      const preview = msgTextEl ? (msgTextEl.textContent || '') : '';
+      setReplyTarget(id, preview);
     }
     wrap.classList.remove('swipe-active');
   }, {passive:true});
@@ -500,6 +559,7 @@ function renderMessage(id,m){
   requestAnimationFrame(()=> wrap.classList.add('show'));
 }
 
+/* ============================== Reactions / pickers ============================== */
 function togglePicker(id,force){
   const el = document.getElementById('picker-'+id);
   if(!el) return;
@@ -508,9 +568,10 @@ function togglePicker(id,force){
   el.classList.toggle('open');
 }
 
-
+/* ============================== Send text (with reply) ============================== */
 sendBtn && (sendBtn.onclick = sendText);
 msgInput && msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendText(); } });
+
 async function sendText(){
   if(!currentRoom){ alert('Сначала выберите комнату'); return; }
   if(!user){ alert('Вы не авторизованы. Проверьте Anonymous auth в Firebase Console.'); console.error('sendText: no user'); return; }
@@ -521,10 +582,26 @@ async function sendText(){
     alert('Загрузка файлов пока отключена: хранилище не настроено');
     msgInput._pendingFile = null;
   }
+
+  /* если установлен replyTarget — соберём превью из DOM */
+  let replyPayload = null;
+  if(replyTarget){
+    replyPayload = buildReplyPayloadFromDOM(replyTarget);
+  }
+
   if(text){
     try{
-      await addDoc(collection(db, 'rooms', currentRoom, 'messages'), { t: serverTimestamp(), uid: user?.uid || null, name: nickname, text, reactions:{}, reactionsBy:{} });
+      await addDoc(collection(db, 'rooms', currentRoom, 'messages'), {
+        t: serverTimestamp(),
+        uid: user?.uid || null,
+        name: nickname,
+        text,
+        reactions:{},
+        reactionsBy:{},
+        reply: replyPayload || null
+      });
       msgInput.value = '';
+      clearReplyTarget();
     }catch(e){
       console.error('sendText error:', e);
       alert('Ошибка отправки: ' + (e.message || e.code || 'unknown'));
@@ -532,10 +609,11 @@ async function sendText(){
   }
 }
 
+/* ============================== Attach (stub) ============================== */
 attachBtn && (attachBtn.onclick = ()=> filePicker.click());
 filePicker && (filePicker.onchange = (e)=> { const f = e.target.files?.[0]; if(f){ msgInput._pendingFile = f; } filePicker.value=''; });
 
-
+/* ============================== Edit/Delete ============================== */
 async function editMessage(id){
   try{
     const ref = doc(db,'rooms',currentRoom,'messages',id);
@@ -552,7 +630,7 @@ async function deleteMessage(id){
   }catch(e){ console.error('deleteMessage error', e); alert('Нет прав на удаление'); }
 }
 
-
+/* ============================== Reactions tx ============================== */
 async function addOrToggleReaction(id,emoji){
   const msgRef = doc(db,'rooms',currentRoom,'messages',id);
   try{
@@ -576,13 +654,14 @@ async function addOrToggleReaction(id,emoji){
   }catch(e){ console.error('addOrToggleReaction error', e); }
 }
 
+/* ============================== Overlay / UI misc ============================== */
 toggleRoomsBtn && (toggleRoomsBtn.onclick = ()=> openRoomsOverlay());
 closeRoomsMobile && (closeRoomsMobile.onclick = ()=> closeRoomsOverlay());
 roomsBackdrop && (roomsBackdrop.onclick = ()=> closeRoomsOverlay());
 function openRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.add('open'); roomsBackdrop && roomsBackdrop.classList.add('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','false'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','false'); renderRoomsList(); }
 function closeRoomsOverlay(){ roomsOverlay && roomsOverlay.classList.remove('open'); roomsBackdrop && roomsBackdrop.classList.remove('show'); roomsOverlay && roomsOverlay.setAttribute('aria-hidden','true'); roomsBackdrop && roomsBackdrop.setAttribute('aria-hidden','true'); }
 
-
+/* ============================== Load my rooms from Firestore ============================== */
 async function loadMyRoomsFromFirestore(){
   if(!user) return;
   try{
@@ -597,85 +676,59 @@ async function loadMyRoomsFromFirestore(){
   }catch(err){ console.error('loadMyRoomsFromFirestore error', err); }
 }
 
-
-
+/* ============================== Save room meta ============================== */
 saveRoomMeta && (saveRoomMeta.onclick = ()=> saveRoomMetaAll());
 saveRoomMeta_m && (saveRoomMeta_m.onclick = ()=> { saveRoomMetaAll(); closeRoomsOverlay(); });
 
 async function saveRoomMetaAll(){
   if(!currentRoom) return;
 
-
-  const name = (roomNameInput_m?.value || roomNameInput_m?.value || '').trim().slice(0,60);
-  const avatar = (roomAvatarInput_m?.value || roomAvatarInput_m?.value || '').trim();
-
-  console.log('Saving exact user input:', { name, avatar });
+  const name = (roomNameInput_m?.value || roomNameInput?.value || '').trim().slice(0,60);
+  const avatar = (roomAvatarInput_m?.value || roomAvatarInput?.value || '').trim();
 
   try{
-    await setDoc(doc(db,'rooms',currentRoom), { 
-      name: name || null, 
-      avatar: avatar || '' 
-    }, { merge: true });
-
+    await setDoc(doc(db,'rooms',currentRoom), { name: name || null, avatar: avatar || '' }, { merge: true });
     const idx = myRooms.findIndex(r => r.code === currentRoom);
     if(idx > -1){
-      myRooms[idx].name = name || myRooms[idx].name; 
+      myRooms[idx].name = name || myRooms[idx].name;
       myRooms[idx].avatar = avatar;
       persistMyRooms();
       renderRoomsList();
       updateRoomHeader(myRooms[idx]);
     }
-
   }catch(e){
     console.error('saveRoomMetaAll error', e);
     alert('Не удалось сохранить');
   }
 }
 
+/* ============================== Nickname ============================== */
+function renderMessagesQuickMeta(){ /* зарезервировано под быстрые апдейты никнейма в UI */ }
 
 function saveNick(){
- 
   const isMobile = window.innerWidth < 1000;
-  
   let newNickname = '';
-  
   if (isMobile) {
-  
-    if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
-      newNickname = nicknameInputMobile.value.trim();
-    } else if (nicknameInput && nicknameInput.value.trim()) {
-      newNickname = nicknameInput.value.trim();
-    } else {
-      newNickname = 'Гость';
-    }
+    if (nicknameInputMobile && nicknameInputMobile.value.trim()) newNickname = nicknameInputMobile.value.trim();
+    else if (nicknameInput && nicknameInput.value.trim()) newNickname = nicknameInput.value.trim();
+    else newNickname = 'Гость';
   } else {
-   
-    if (nicknameInput && nicknameInput.value.trim()) {
-      newNickname = nicknameInput.value.trim();
-    } else if (nicknameInputMobile && nicknameInputMobile.value.trim()) {
-      newNickname = nicknameInputMobile.value.trim();
-    } else {
-      newNickname = 'Гость';
-    }
+    if (nicknameInput && nicknameInput.value.trim()) newNickname = nicknameInput.value.trim();
+    else if (nicknameInputMobile && nicknameInputMobile.value.trim()) newNickname = nicknameInputMobile.value.trim();
+    else newNickname = 'Гость';
   }
-  
-
   nickname = newNickname.slice(0,32);
-  
-
   if (nicknameInput) nicknameInput.value = nickname;
   if (nicknameInputMobile) nicknameInputMobile.value = nickname;
-  
   localStorage.setItem('crm_nick', nickname);
   renderMessagesQuickMeta();
-  
-  console.log('Nick saved:', nickname, 'priority:', isMobile ? 'mobile' : 'desktop');
 }
 if (saveNickBtn) saveNickBtn.addEventListener('click', saveNick);
 if (saveNickBtnMobile) saveNickBtnMobile.addEventListener('click', () => { saveNick(); closeRoomsOverlay(); });
 if (nicknameInput) nicknameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); }});
 if (nicknameInputMobile) nicknameInputMobile.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveNick(); closeRoomsOverlay(); }});
 
+/* ============================== Join UI ============================== */
 document.getElementById('btnHome')?.addEventListener('click', ()=> renderRoomsList());
 document.getElementById('btnCreate')?.addEventListener('click', ()=> createRoomFlow());
 document.getElementById('btnSettings')?.addEventListener('click', ()=> openRoomsOverlay());
@@ -692,28 +745,21 @@ async function tryJoinFromInput(inputEl){
   }
   await joinRoomByCode(raw);
 }
-
-
 const joinBtnDesktop = document.getElementById('joinBtn');
-if (joinBtnDesktop) {
-  joinBtnDesktop.addEventListener('click', ()=> tryJoinFromInput(document.getElementById('joinCode')));
-}
+if (joinBtnDesktop) joinBtnDesktop.addEventListener('click', ()=> tryJoinFromInput(document.getElementById('joinCode')));
 
 let joinBtnMobileEl = document.getElementById('joinBtn_mobile');
 if (!joinBtnMobileEl) {
   const parent = document.getElementById('joinCode_mobile')?.closest('.field') || document.getElementById('joinCode_mobile')?.parentElement;
   joinBtnMobileEl = parent ? parent.querySelector('button') : null;
 }
-if (joinBtnMobileEl) {
-  joinBtnMobileEl.addEventListener('click', ()=> { tryJoinFromInput(document.getElementById('joinCode_mobile')); closeRoomsOverlay(); });
-}
-
+if (joinBtnMobileEl) joinBtnMobileEl.addEventListener('click', ()=> { tryJoinFromInput(document.getElementById('joinCode_mobile')); closeRoomsOverlay(); });
 
 document.getElementById('joinCode')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); }});
 document.getElementById('joinCode_mobile')?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryJoinFromInput(e.target); closeRoomsOverlay(); }});
 
+/* ============================== Auth ============================== */
 onAuthStateChanged(auth, async (u) => {
-  console.log('onAuthStateChanged', u);
   try {
     if (!u) {
       try {
@@ -736,28 +782,110 @@ onAuthStateChanged(auth, async (u) => {
   }
 });
 
+/* ============================== Boot ============================== */
 saveNick();
 renderRoomsList();
-
 window.addEventListener('beforeunload', ()=>{
   stopAllWatchers();
   if(unsubMessages) try{ unsubMessages(); }catch(e){ console.error(e) }
 });
+// showReplyPanel(messageId, previewText, authorName, avatarUrl)
+// - messageId: id сообщения в DOM / Firestore
+// - previewText: короткий сниппет (строка)
+// - authorName: имя автора (строка)
+// - avatarUrl: (опционально) ссылка на аватар, если нет — подставит первые буквы
+function showReplyPanel(messageId, previewText = '', authorName = 'Сообщение', avatarUrl = '') {
+  // найдем или создадим replyBar
+  let rb = document.getElementById('replyBar');
+  if(!rb) {
+    // если панель отсутствует — создаём минимальную (вставляем в .chat-input-container)
+    const container = document.querySelector('.chat-input-container') || document.querySelector('.composer') || document.body;
+    rb = document.createElement('div');
+    rb.id = 'replyBar';
+    rb.className = 'reply-bar';
+    rb.innerHTML = `
+      <div class="reply-left">
+        <div id="replyAvatar" class="reply-avatar"></div>
+        <div class="reply-content">
+          <div id="replyAuthor" class="reply-author"></div>
+          <div id="replySnippet" class="reply-snippet"></div>
+        </div>
+      </div>
+      <button id="cancelReply" class="reply-cancel" aria-label="Отменить ответ">✕</button>
+    `;
+    container.insertBefore(rb, container.firstChild);
+  }
 
+  // элементы внутри
+  const aEl = document.getElementById('replyAvatar');
+  const auEl = document.getElementById('replyAuthor');
+  const snEl = document.getElementById('replySnippet');
+  const cancelBtn = document.getElementById('cancelReply');
 
-let replyTarget = null;
-const replyBar = document.getElementById('replyBar');
-const replyText = document.getElementById('replyText');
-const cancelReply = document.getElementById('cancelReply');
-if(cancelReply) cancelReply.addEventListener('click', ()=>{ replyTarget = null; replyBar && replyBar.classList.add('hidden'); });
+  // заполнение
+  if(auEl) auEl.textContent = String(authorName || 'Сообщение');
+  if(snEl) snEl.textContent = String(previewText || '').slice(0,200);
+  if(aEl) {
+    if(avatarUrl){
+      aEl.style.backgroundImage = `url("${avatarUrl}")`;
+      aEl.style.backgroundSize = 'cover';
+      aEl.textContent = '';
+    } else {
+      // первые 1-2 буквы
+      const initials = (authorName || '').trim().split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase() || '?';
+      aEl.style.backgroundImage = '';
+      aEl.textContent = initials;
+    }
+  }
 
+  // show
+  rb.classList.remove('hidden');
+  rb.setAttribute('aria-hidden','false');
 
-function renderMessagesQuickMeta(){
+  // bind cancel if not bound
+  if(cancelBtn && !cancelBtn._bound) {
+    cancelBtn.addEventListener('click', () => {
+      hideReplyPanel();
+    });
+    cancelBtn._bound = true;
+  }
 
+  // клик по превью — скролл к сообщению
+  if(rb._boundClick !== messageId) {
+    rb.onclick = (e) => {
+      // если клик по кнопке — игнорируем
+      if(e.target.closest('#cancelReply')) return;
+      if(messageId) {
+        const target = document.querySelector(`.bubble.message[data-id="${CSS.escape(messageId)}"]`);
+        if(target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('ping');
+          setTimeout(()=> target.classList.remove('ping'), 1200);
+        }
+      }
+    };
+    rb._boundClick = messageId;
+  }
+
+  // установить глобальную replyTarget (используется sendText)
+  replyTarget = messageId;
+
+  // поставить фокус в инпут
+  if(msgInput) msgInput.focus();
 }
 
+// hideReplyPanel() — убрать панель и сбросить replyTarget
+function hideReplyPanel() {
+  const rb = document.getElementById('replyBar');
+  if(rb) {
+    rb.classList.add('hidden');
+    rb.setAttribute('aria-hidden','true');
+  }
+  replyTarget = null;
+}
 
 </script>
+
 
 </body>
 </html>

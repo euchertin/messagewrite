@@ -3,12 +3,11 @@
   src: url('../fonts/FuturaPT-Demi.ttf') format('truetype');
   font-style: normal;
 }
-  .container-with-buttons {
+.container-with-buttons {
   display: flex;
   flex-direction: column; /* кнопки в колонку */
   gap: 8px;               /* расстояние между ними */
 }
-
 
 .mw {
   font-family: 'Futura';
@@ -73,20 +72,36 @@ body{
 }
 }
 /* messages area */
-.messages{
-  display:flex; flex-direction:column; gap:10px;
-  padding:12px 14px calc(var(--composer-h) + 12px);
-  overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1; min-height:0; width:100%;
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 14px calc(var(--composer-h) + 12px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
+
+.messages .bubble:first-child {
+  margin-top: 0 !important; /* сбрасываем любой верхний margin у первого */
+  transform: none !important; /* убираем translateY для первого */
+  opacity: 1 !important;      /* сразу видимый */
+}
+
+
+
 
 /* message bubbles — ШИРЕ + разумный минимум (фикс узости) */
 .bubble {
   display: block;
   max-width: 400px; /* компактная ширина на ПК */
   min-width: 260px; /* минимальная ширина для небольших экранов */
-  padding: 10px 14px;
+    margin: 0; /* убираем индивидуальные margin сверху/снизу */
+  padding: 8px 12px;
   border-radius: 20px;
-  line-height: 1; /* чуть выше для читаемости */
+  line-height: 1.2; /* чуть выше для читаемости */
   position: relative;
   word-wrap: break-word;
   overflow-wrap: anywhere;
@@ -189,8 +204,11 @@ body{
 }
 
 /* =================== COMPOSER (bottom fixed) =================== */
+/* убрал жесткую высоту; оставил min-height, добавил safe-area для мобильных */
 .composer{
-  height:var(--composer-h); padding:10px 12px; border-top:1px solid var(--divider);
+  min-height: var(--composer-h);
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));
+  border-top:1px solid var(--divider);
   display:flex; gap:8px; align-items:center;
   background:linear-gradient(180deg, rgba(0,0,0,.04), transparent), #0f1012;
   position:fixed; left:var(--sidebar-w); right:var(--list-min); bottom:0; z-index:12000;
@@ -199,6 +217,22 @@ body{
 @media (max-width:1000px){ .composer{ left:0; right:0; } }
 .composer .input{
   border-radius:999px;padding:10px 14px;font-size:15px;flex:1;background:#121214;border:1px solid #222224;color:var(--text);outline:none; min-height:40px; max-height:140px; overflow:auto;
+}
+
+/* скрепка — теперь строго круглая и не сжимается */
+.btnsk {
+  flex-shrink: 0; /* запрещаем сжимать */
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  font-size: 18px;
+  color: #fff;
+  padding: 0;
 }
 
 /* primary button & send */
@@ -262,34 +296,68 @@ a{color:inherit}
   }
 }
 
-/* Мини-бар для ответа */
+/* немного уменьшил внутренние отступы composer */
+.composer {
+  padding: 8px;
+}
+
+/* контейнер для input + reply-bar */
+.chat-input-container {
+  position: relative; /* чтобы reply-bar позиционировался относительно контейнера */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+/* сам input внутри контейнера */
+.chat-input-container .input {
+  flex: 1;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 15px;
+  background: #121214;
+  border: 1px solid #222224;
+  color: var(--text);
+  outline: none;
+  min-height: 40px;
+  max-height: 140px;
+  overflow: auto;
+}
+
+/* reply-bar — панель над инпутом */
 .reply-bar {
-  position: fixed;
-  bottom: 20px;    /* отступ от низа */
-  right: 20px;     /* отступ от правого края */
-  left: auto;      /* обязательно, чтобы не растягивалось по ширине */
-  width: auto;     /* или фиксированная ширина, например 300px */
-  max-width: 300px; 
-  background: var(--surface-2);
-  padding: 8px 12px;
+  position: absolute;
+  bottom: 100%; /* ставим над input */
+  left: 0;
+  width: 100%;
+  max-height: 48px;
+  background: #1d1d20;
   border-left: 4px solid var(--accent);
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
+  padding: 6px 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: var(--text);
+  font-size: 14px;
   font-family: 'Futura', sans-serif;
-  transition: transform 0.25s ease, opacity 0.25s ease;
-  opacity: 1;
-  z-index: 10000; /* очень большой, чтобы точно сверху всех */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 20;
 }
 
 .reply-bar.hidden {
-  opacity: 0;
-  transform: translateY(20px);
-  pointer-events: none;
+  display: none;
 }
 
+.reply-bar span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* compact cancel button */
 .reply-bar button {
   background: none;
   border: none;
@@ -298,14 +366,25 @@ a{color:inherit}
   cursor: pointer;
 }
 
-/* Свайп по сообщению */
 .message {
   position: relative;
   transition: transform 0.25s ease;
 }
+
+/* Стиль при свайпе */
 .message.swipe-active {
   background: rgba(58, 58, 58, 0.3);
 }
+
+/* Уменьшаем зазор между reply и текстом */
+.message .reply {
+  margin-bottom: 2px; /* Было больше, теперь почти нет зазора */
+}
+
+.message .message-text {
+  margin-top: 0; /* убираем лишний отступ */
+}
+
 
 .message-footer {
   display: flex;
@@ -334,4 +413,86 @@ a{color:inherit}
 
 .bubble.from-me .read-status {
   margin-left: auto;
+}
+
+/* ================= Compact reply preview overrides (концентрированная панель ответа) ================= */
+
+/* чуть меньше зазор между сообщениями */
+.messages { gap: 6px; }
+
+/* чуть компактнее сам пузырёк */
+/* компактнее пузырьки */
+.bubble{ padding: 8px 12px; line-height: 1.25; }
+.bubble .message-text{ margin: 0; }
+
+
+
+/* компактное превью ответа */
+.reply-preview {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  margin: 0 0 6px 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 0ю;
+  max-height: 40px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.02);
+}
+
+/* автор в превью — компактный и визуально отделён */
+.reply-preview .reply-author {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--accent);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* сниппет — одна строчка с троеточием */
+.reply-preview .reply-snippet {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+}
+
+.bubble .reply-preview + .message-text {
+  margin-top: 0;       /* убираем margin у текста */
+  padding-top: 0;      /* если есть padding сверху */
+}
+
+
+
+/* чуть плотнее вертикальные отступы у пузырьков */
+
+
+/* небольшая подсветка при скролле/фокусе */
+.ping {
+  box-shadow: 0 0 0 3px rgba(58,138,255,0.06) inset;
+  transition: box-shadow .25s ease;
+}
+
+.bubble .reply-preview {
+  margin: 0 !important;
+  padding: 2px 4px;
+}
+
+.bubble .message-text {
+  margin: 0 !important;
+  padding: 0;
+  line-height: 1.2;
 }
